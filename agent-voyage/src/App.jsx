@@ -126,8 +126,18 @@ function parseHotelBlocks(lines) {
   const blocks = []; let cur = null;
   for(const l of lines){
     const h3 = l.match(/^### (.+)/);
-    if(h3){if(cur) blocks.push(cur); cur={name:h3[1].trim(),lines:[]};}
-    else if(cur) cur.lines.push(l);
+    if(h3){
+      const name = h3[1].trim();
+      // Skip destination headers like "MARBELLA (6 nuits)" or "HONOLULU (12 nuits)"
+      const isDestHeader = /\(\d+\s*nuits?\)/i.test(name) || /^[A-Z\s\-,]+$/.test(name);
+      if(isDestHeader){
+        if(cur) blocks.push(cur);
+        cur = {name, lines:[], isHeader:true};
+      } else {
+        if(cur) blocks.push(cur);
+        cur = {name, lines:[], isHeader:false};
+      }
+    } else if(cur) cur.lines.push(l);
   }
   if(cur) blocks.push(cur);
   return blocks;
@@ -351,37 +361,42 @@ function RecapDisplay({lines, activeClass, prices}) {
       </div>
 
       {/* Stats grid */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:"8px",marginBottom:"20px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:"8px",marginBottom:"20px"}}>
         {classPrice && (
-          <div style={{background:C.card2,border:`1px solid ${C.gold}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:"11px",color:C.gold,marginBottom:"4px",letterSpacing:"0.06em"}}>{classEmoji} {classLabel}</div>
+          <div style={{background:C.card2,border:`2px solid ${C.gold}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
+            <div style={{fontSize:"10px",color:C.gold,marginBottom:"4px",letterSpacing:"0.06em",fontWeight:"700"}}>{classEmoji} {classLabel.toUpperCase()}</div>
             <div style={{fontSize:"22px",fontWeight:"900",color:C.gold,letterSpacing:"-0.02em"}}>{parseInt(classPrice.replace(/\s/g,"")).toLocaleString("fr-CH")}</div>
-            <div style={{fontSize:"10px",color:C.muted}}>CHF total</div>
+            <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>CHF total</div>
           </div>
         )}
         {nights && (
           <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:"20px",marginBottom:"4px"}}>🌙</div>
+            <div style={{fontSize:"24px",marginBottom:"4px"}}>🌙</div>
             <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{nights}</div>
-            <div style={{fontSize:"10px",color:C.muted}}>nuits</div>
+            <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>nuits</div>
           </div>
         )}
         {hotelRating && (
           <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:"20px",marginBottom:"4px"}}>⭐</div>
+            <div style={{fontSize:"24px",marginBottom:"4px"}}>⭐</div>
             <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{hotelRating}</div>
-            <div style={{fontSize:"10px",color:C.muted}}>/ 10 hôtel</div>
+            <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>note hôtel</div>
           </div>
         )}
         <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-          <div style={{fontSize:"20px",marginBottom:"4px"}}>✈️</div>
+          <div style={{fontSize:"24px",marginBottom:"4px"}}>✈️</div>
           <div style={{fontSize:"14px",fontWeight:"700",color:C.text}}>GVA</div>
-          <div style={{fontSize:"10px",color:C.muted}}>départ</div>
+          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>aéroport départ</div>
         </div>
       </div>
 
-      {/* Full detail */}
-      <MDInline text={lines.join("\n")} activeClass={activeClass}/>
+      {/* Full detail — filter out exchange rate noise and pipe-only lines */}
+      <MDInline text={lines.filter(l=>{
+        if(!l.trim()||l.trim()==="\|") return false;
+        if(/^\d+\s+[A-Z]+\s*=\s*[\d.]+\s+[A-Z]+/.test(l)) return false; // exchange rates
+        if(/^\(taux/.test(l.trim())) return false;
+        return true;
+      }).join("\n")} activeClass={activeClass}/>
     </div>
   );
 }
@@ -391,21 +406,24 @@ function RecapDisplay({lines, activeClass, prices}) {
 // ═══════════════════════════════════════════════════════════════════
 
 function FlightDisplay({lines, activeClass, setActiveClass, prices}) {
-  // Parse leg sections (### headers or bold headers)
+  // Split lines into legs by ### or "LEG N" bold headers
   const legs = [];
   let cur = null;
   for(const l of lines) {
     const h3 = l.match(/^### (.+)/);
-    const bold = l.match(/^\*\*(Vol \d+[^*]*)\*\*/);
-    if(h3||bold) { if(cur) legs.push(cur); cur={title:(h3?h3[1]:bold[1]).trim(), lines:[]}; }
-    else if(cur) cur.lines.push(l);
-    else if(!cur && l.trim()) { cur={title:"Vols",lines:[l]}; }
+    const bold = l.match(/^\*\*(?:LEG|Vol)\s*\d+[^*]*\*\*/i);
+    const legLine = l.match(/^(?:LEG|Leg)\s*\d+[\s:]+(.+)/);
+    if(h3||bold||legLine){
+      if(cur) legs.push(cur);
+      const title = h3?h3[1]:(bold?l.replace(/\*\*/g,""):l);
+      cur = {title:title.trim(), lines:[]};
+    } else if(cur) cur.lines.push(l);
   }
   if(cur) legs.push(cur);
 
   return (
     <div>
-      {/* Class tabs */}
+      {/* Class selector tabs */}
       <div style={{display:"flex",borderRadius:"10px",overflow:"hidden",border:`1px solid ${C.border}`,marginBottom:"20px"}}>
         {[
           {id:"business",emoji:"💺",label:"Full Business",price:prices.business},
@@ -414,20 +432,22 @@ function FlightDisplay({lines, activeClass, setActiveClass, prices}) {
         ].map((c,i)=>(
           <button key={c.id} onClick={()=>setActiveClass(c.id)} style={{flex:1,padding:"13px 8px",textAlign:"center",background:activeClass===c.id?C.gold:C.card2,color:activeClass===c.id?"#0a0a0a":C.muted,border:"none",borderLeft:i>0?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"all 0.2s"}}>
             <div style={{fontSize:"12px",fontWeight:"700"}}>{c.emoji} {c.label}</div>
-            {c.price&&<div style={{fontSize:"16px",fontWeight:"900",marginTop:"3px",letterSpacing:"-0.02em"}}>{parseInt(c.price.replace(/\s/g,"")).toLocaleString("fr-CH")} CHF</div>}
+            {c.price&&<div style={{fontSize:"16px",fontWeight:"900",marginTop:"3px",letterSpacing:"-0.02em"}}>{parseInt((c.price||"0").replace(/\s/g,"")).toLocaleString("fr-CH")} CHF</div>}
           </button>
         ))}
       </div>
-
-      {/* Flight legs or raw content */}
-      {legs.length>0 ? legs.map((leg,i)=>(
-        <FlightLegCard key={i} title={leg.title} lines={leg.lines} activeClass={activeClass}/>
+      {/* Render legs as clean cards, or full MDInline if no legs found */}
+      {legs.length>1 ? legs.map((leg,i)=>(
+        <div key={i} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",marginBottom:"8px",overflow:"hidden"}}>
+          <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.border}`,fontSize:"11px",fontWeight:"700",letterSpacing:"0.08em",color:C.gold}}>{leg.title}</div>
+          <div style={{padding:"14px 16px"}}><MDInline text={leg.lines.join("\n")} activeClass={activeClass}/></div>
+        </div>
       )) : <MDInline text={lines.join("\n")} activeClass={activeClass}/>}
     </div>
   );
 }
 
-function FlightLegCard({title, lines, activeClass}) {
+) {
   const text = lines.join(" ");
   // Parse times
   const timeMatch = text.match(/(\d{2}:\d{2})/g)||[];
@@ -500,10 +520,23 @@ function FlightLegCard({title, lines, activeClass}) {
 // HOTEL CARD — Booking/Hyatt inspired
 // ═══════════════════════════════════════════════════════════════════
 
+function DestinationHeader({name}) {
+  return (
+    <div style={{padding:"10px 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:"10px"}}>
+      <span style={{fontSize:"11px",fontWeight:"700",letterSpacing:"0.12em",color:C.gold}}>{name.toUpperCase()}</span>
+    </div>
+  );
+}
+
 function HotelCard({name, lines}) {
   const [open, setOpen] = useState(true);
   const images = extractImages(lines);
-  const content = lines.filter(l=>!/^IMAGES:/i.test(l)&&!/^### /.test(l));
+  // Filter: no IMAGES lines, no table separator lines, no raw pipe-only lines
+  const content = lines.filter(l=>{
+    if(/^IMAGES:/i.test(l)) return false;
+    if(/^\|[\s:\-|]+\|$/.test(l.trim())) return false;
+    return true;
+  });
   const text = content.join(" ");
 
   // Extract structured info
@@ -601,14 +634,20 @@ function HotelCard({name, lines}) {
 function TotauxDisplay({lines, activeClass}) {
   const text = lines.join("\n");
   // Try to extract structured totals
-  const extractNum = (pattern) => {
-    const m = text.match(pattern);
-    return m ? parseInt(m[1].replace(/\s/g,"")).toLocaleString("fr-CH") : "-";
+  // Extract largest numbers associated with each scenario
+  const extractNum = (patterns) => {
+    for(const p of patterns){
+      const m = text.match(p);
+      if(m) {
+        const n = parseInt(m[1].replace(/[\s\u202f]/g,""));
+        if(n>100) return n.toLocaleString("fr-CH");
+      }
+    }
+    return "-";
   };
-  const volsBiz = extractNum(/(?:vols?|flights?)[^|\n]*\|[^|]*\|[^|]*(\d[\d\s]+)[^|]*\|[^|]*(\d[\d\s]+)[^|]*\|[^|]*(\d[\d\s]+)/i);
-  const totalBiz = extractNum(/business[^0-9]*(\d[\d\s]+)\s*CHF/i);
-  const totalMix = extractNum(/mix[^0-9]*(\d[\d\s]+)\s*CHF/i);
-  const totalEco = extractNum(/éco[^0-9]*(\d[\d\s]+)\s*CHF/i);
+  const totalBiz = extractNum([/TOTAL[^|\n]*\|[^|\n]*([\d\s]{3,})[^|\n]*\|[^|\n]*([\d\s]{3,})[^|\n]*\|[^|\n]*([\d\s]{3,})/i, /(?:Full\s*)?Business[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?(?=[^0-9]|$)/i]);
+  const totalMix = extractNum([/Mixte[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?(?=[^0-9]|$)/i, /mix[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?/i]);
+  const totalEco = extractNum([/(?:Full\s*)?[EÉ]co[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?(?=[^0-9]|$)/i, /éco[^0-9]*(\d[\d\s]{2,})/i]);
 
   const hasExtracted = totalBiz!=="-"||totalMix!=="-"||totalEco!=="-";
 
@@ -655,8 +694,13 @@ function MeteoDisplay({lines}) {
   weekMatches.forEach((m,i)=>periods.push({label:`Sem. ${i+1}`,desc:m[2].trim()}));
   const [periodIdx, setPeriodIdx] = useState(0);
 
-  // Clean the text lines (remove bullet points between text)
-  const cleanLines = src.split("\n").map(l=>l.replace(/^[-•]\s*/,"").trim()).filter(l=>l);
+  // Clean text lines — strip bullets, apply inline markdown
+  const inlineMd = s => s
+    .replace(/\*\*(.+?)\*\*/g,"<strong style='color:"+C.text+"'>$1</strong>")
+    .replace(/\*(.+?)\*/g,"<em>$1</em>");
+  const cleanLines = src.split("\n")
+    .map(l=>l.replace(/^[-•]\s*/,"").replace(/,\s*,/g,",").trim())
+    .filter(l=>l && !/^\|/.test(l));
 
   return (
     <div>
@@ -699,9 +743,12 @@ function MeteoDisplay({lines}) {
 
       {/* Clean text content */}
       <div style={{lineHeight:"1.8"}}>
-        {cleanLines.map((l,i)=>(
-          l.trim() && <p key={i} style={{margin:"0 0 6px",fontSize:"13px",color:C.text}}>{l}</p>
-        ))}
+        {cleanLines.map((l,i)=>{
+          if(!l.trim()) return null;
+          // Section headers (bold) get a slightly different style
+          const isHeader = l.startsWith("**") || l.match(/^[A-ZÀÂÉÈÊ][a-zàâéèê]+\s+\(/);
+          return <p key={i} style={{margin:"0 0 7px",fontSize:"13px",color:isHeader?C.text:C.muted,fontWeight:isHeader?"600":"400"}} dangerouslySetInnerHTML={{__html:inlineMd(l)}}/>;
+        })}
       </div>
     </div>
   );
@@ -841,7 +888,7 @@ function ResultsView({text}) {
             ) : isHotel && hotelBlocks.length>0 ? (
               <div>
                 {(()=>{const pre=[];for(const l of sec.lines){if(/^### /.test(l)) break;pre.push(l);}return pre.length?<MDInline text={pre.join("\n")} activeClass={activeClass}/>:null;})()}
-                {hotelBlocks.map((b,j)=><HotelCard key={j} name={b.name} lines={b.lines}/>)}
+                {hotelBlocks.map((b,j)=>b.isHeader ? <DestinationHeader key={j} name={b.name}/> : <HotelCard key={j} name={b.name} lines={b.lines}/>)}
               </div>
             ) : isTotal ? (
               <TotauxDisplay lines={sec.lines} activeClass={activeClass}/>
