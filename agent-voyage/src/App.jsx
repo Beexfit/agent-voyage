@@ -140,8 +140,8 @@ function HotelCard({name,lines,t}){
   const zone=get("zone")||get("emplac");const chambre=get("chambre");
   const equip=get("équip")||get("equip");const prixNuit=get("prix/nuit")||get("prix_nuit");
   const prixTotal=get("prix total")||get("prix_total");
-  const pN=prixNuit.match(/(\d[\d'\s]*)/)?.[1]?.replace(/['\s]/g,"")||"";
-  const pT=prixTotal.match(/(\d[\d'\s]*)/)?.[1]?.replace(/['\s]/g,"")||"";
+  const pN=prixNuit.match(/(\d[\d',.\s]*)/)?.[1]?.replace(/[',.\s]/g,"")||"";
+  const pT=prixTotal.match(/(\d[\d',.\s]*)/)?.[1]?.replace(/[',.\s]/g,"")||"";
   const petitDej=get("petit");const piscine=get("piscine");const spa=get("spa");const vue=get("vue");
   const lien=get("lien")||"";const linkM=lien.match(/\[([^\]]+)\]\(([^)]+)\)/);
   // Prose (non-table, non-IMAGES)
@@ -405,7 +405,7 @@ export default function App(){
   const uLeg=(i,f,v)=>{setLegs(l=>{const n=[...l];n[i]={...n[i],[f]:v};if(f==="d2"&&i+1<n.length)n[i+1]={...n[i+1],d1:v};return n;});};
   const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:14,fontFamily:FN,padding:"13px 14px",outline:"none"};
 
-  const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules des tableaux. Pour les hébergements: ### Ville (dates) puis #### Nom Hôtel. Pour IMAGES: chercher les VRAIES URLs de photos sur le site officiel de l'hôtel ou Booking.com (cf.bstatic.com) - ne jamais inventer d'URLs. Pour la météo: ### Ville (Mois). 3 scénarios de vol, totaux CHF."].filter(Boolean).join("\n");};
+  const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules. VOLS: créer un ### séparé par segment (### GVA vers AGP, ### AGP vers MIA, ### MIA vers GVA) avec chacun son propre tableau de 3 scénarios. HÉBERGEMENTS: ### Ville (dates) puis #### Nom Hôtel. IMAGES: chercher les vraies URLs sur Booking.com (cf.bstatic.com) ou le site officiel. Si aucune URL trouvée, ne PAS écrire la ligne IMAGES. MÉTÉO: ### Ville (Mois). Totaux CHF avec les 3 scénarios."].filter(Boolean).join("\n");};
   const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
   const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
 
@@ -436,7 +436,7 @@ export default function App(){
                 <div style={{textAlign:"center",color:t.gold,fontWeight:900,fontSize:16,paddingBottom:14}}>→</div>
                 <div><Lbl t={t}>Vers</Lbl><input value={leg.to} onChange={e=>uLeg(idx,"to",e.target.value)} placeholder="Destination" style={INP}/></div>
               </div>
-              {idx===legs.length-1||legs.length===1?
+              {legs.length===1?
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div><Lbl t={t}>Date aller</Lbl><DateCell value={leg.d1} onChange={v=>uLeg(idx,"d1",v)} flex={leg.f1} onFlex={v=>uLeg(idx,"f1",v)} t={t}/></div>
                 <div><Lbl t={t}>Date retour</Lbl><DateCell value={leg.d2} onChange={v=>uLeg(idx,"d2",v)} flex={leg.f2} onFlex={v=>uLeg(idx,"f2",v)} t={t}/></div>
@@ -464,7 +464,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.7</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.8</div>
       <ChatWidget t={t}/>
     </div>
   );
