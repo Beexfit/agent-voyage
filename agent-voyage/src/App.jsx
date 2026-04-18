@@ -343,7 +343,14 @@ function CalendrierDisplay({lines,t}){
 // RECO + FIDELITE
 // ═══════════════════════════════════════════════════════════════
 function RecoDisplay({lines,t}){return<div style={{background:t.goldBg,border:`1px solid ${t.gold}25`,borderRadius:12,padding:20}}><div style={{fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(lines.filter(l=>l.trim()).join(" "))}}/></div>;}
-function FideliteDisplay({lines,t}){return<div style={{display:"flex",flexDirection:"column",gap:8}}>{lines.filter(l=>l.trim().length>5&&!/^#/.test(l.trim())).map((l,i)=><div key={i} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:10,padding:"14px 16px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(l)}}/>)}</div>;}
+function FideliteDisplay({lines,t}){
+  // Group lines into paragraphs: bold lines start new paragraphs, others continue
+  const paras=[];let cur="";
+  for(const l of lines){const s=l.trim();if(!s||/^#/.test(s))continue;
+    if(/^\*\*/.test(s)||s.length>40&&cur){if(cur)paras.push(cur);cur=s;}
+    else{cur=cur?(cur+" "+s):s;}}
+  if(cur)paras.push(cur);
+  return<div style={{display:"flex",flexDirection:"column",gap:8}}>{paras.filter(p=>p.length>5).map((p,i)=><div key={i} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:10,padding:"14px 16px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(p)}}/>)}</div>;}
 
 // ═══════════════════════════════════════════════════════════════
 // RESULTS VIEW + RAW TEXT
@@ -464,7 +471,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.8</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.9</div>
       <ChatWidget t={t}/>
     </div>
   );
