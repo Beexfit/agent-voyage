@@ -347,11 +347,6 @@ export default function App() {
 
   const reset = () => { setPhase("idle"); setResult(""); setErr(""); };
 
-  // ── Shared section wrapper ────────────────────────────────────────────────
-  const Section = ({ children, style = {} }) => (
-    <div style={{ marginBottom: "20px", ...style }}>{children}</div>
-  );
-
   return (
     <div style={{ maxWidth: "860px", margin: "0 auto", padding: "2.5rem 1.5rem", background: C.bg, minHeight: "100vh", fontFamily: C.sans }}>
 
@@ -379,7 +374,7 @@ export default function App() {
         <div style={{ padding: "24px 28px" }}>
 
           {/* Row 1 — Airport + Travelers */}
-          <Section>
+          <div style={{ marginBottom: "20px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", gap: "16px" }}>
               <div>
                 <Lbl>Aéroport de départ</Lbl>
@@ -411,10 +406,10 @@ export default function App() {
                 </select>
               </div>
             </div>
-          </Section>
+          </div>
 
           {/* Row 2 — Dates */}
-          <Section>
+          <div style={{ marginBottom: "20px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
               <div>
                 <Lbl>Date de départ *</Lbl>
@@ -425,10 +420,10 @@ export default function App() {
                 <input type="date" value={retDate} onChange={(e) => setRetDate(e.target.value)} style={{ ...IS }} />
               </div>
             </div>
-          </Section>
+          </div>
 
           {/* Row 3 — Stages */}
-          <Section>
+          <div style={{ marginBottom: "20px" }}>
             <Lbl>Étapes du voyage *</Lbl>
             {stages.map((stage, idx) => (
               <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
@@ -465,29 +460,29 @@ export default function App() {
                 + Ajouter une étape ({stages.length}/5)
               </button>
             )}
-          </Section>
+          </div>
 
           {/* Divider */}
           <div style={{ borderTop: `2px solid ${C.black}`, margin: "24px 0" }} />
 
           {/* Ambiance */}
-          <Section>
+          <div style={{ marginBottom: "20px" }}>
             <Lbl>Ambiance recherchée</Lbl>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
               {VIBES.map((v) => <Chip key={v.id} label={v.label} selected={vibes.includes(v.id)} onClick={() => toggleVibe(v.id)} />)}
             </div>
-          </Section>
+          </div>
 
           {/* Activities */}
-          <Section>
+          <div style={{ marginBottom: "20px" }}>
             <Lbl>Activités souhaitées</Lbl>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
               {ACTIVITIES.map((a) => <Chip key={a.id} label={a.label} selected={activities.includes(a.id)} onClick={() => toggleAct(a.id)} />)}
             </div>
-          </Section>
+          </div>
 
           {/* Notes */}
-          <Section>
+          <div style={{ marginBottom: "20px" }}>
             <Lbl>Notes spécifiques</Lbl>
             <textarea
               value={notes}
@@ -495,7 +490,7 @@ export default function App() {
               placeholder="Budget max, occasion spéciale, compagnie aérienne préférée, hôtel en particulier..."
               style={{ ...IS, minHeight: "56px", resize: "vertical", fontWeight: "400", fontSize: "13px" }}
             />
-          </Section>
+          </div>
 
           {/* Error */}
           {err && (
@@ -581,4 +576,3 @@ export default function App() {
     </div>
   );
 }
-
