@@ -50,17 +50,21 @@ function RecapDisplay({lines,t}){
   if(!data.length)return null;
   // Extract key info
   let nights=0,voy="1";
-  for(const r of data){const k=(r[0]||"").toLowerCase();const v=r[1]||"";
-    // Search for nights in ANY field
-    const nm=v.match(/(\d+)\s*nuit/g);if(nm)nm.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});
-    if(/voyag/i.test(k)){const m=v.match(/(\d+)/);if(m)voy=m[1];}
+  for(const r of data){const all=r.join(" ");
+    const nm=all.match(/(\d+)\s*nuit/g);if(nm)nm.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});
+    if(/personne|voyag/i.test(all)){const m=all.match(/(\d+)\s*personne/i)||all.match(/(\d+)\s*voyag/i);if(m)voy=m[1];}
   }
+  // Also check header row for column-based format
+  if(!nights&&rows[0]){const hdr=rows[0];for(let i=0;i<hdr.length;i++){if(/dur|nuit/i.test(hdr[i])){for(const r of data){const nm=(r[i]||"").match(/(\d+)/);if(nm)nights+=parseInt(nm[1])||0;}}if(/voyag|pers/i.test(hdr[i])){for(const r of data){const m=(r[i]||"").match(/(\d+)/);if(m)voy=m[1];}}}}
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
       <div style={{background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:t.goldD,letterSpacing:"0.08em",marginBottom:8}}>NUITS</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{nights||"–"}</div></div>
       <div style={{background:`${t.blue}10`,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:t.blue,letterSpacing:"0.08em",marginBottom:8}}>VOYAGEUR</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{voy}</div></div>
     </div>
-    <div style={{borderRadius:12,border:`1px solid ${t.border}`,overflow:"hidden"}}>{data.map((r,i)=><div key={i} style={{display:"flex",borderBottom:i<data.length-1?`1px solid ${t.border}`:"none",padding:"12px 14px"}}><div style={{width:130,flexShrink:0,fontSize:13,fontWeight:600,color:t.text}}>{r[0]}</div><div style={{fontSize:13,color:t.muted,lineHeight:1.5}}>{r[1]}</div></div>)}</div>
+    <div style={{borderRadius:12,border:`1px solid ${t.border}`,overflow:"hidden"}}>
+      {isKV?data.map((r,i)=><div key={i} style={{display:"flex",borderBottom:i<data.length-1?`1px solid ${t.border}`:"none",padding:"12px 14px"}}><div style={{width:130,flexShrink:0,fontSize:13,fontWeight:600,color:t.text}}>{r[0]}</div><div style={{fontSize:13,color:t.muted,lineHeight:1.5}}>{r[1]}</div></div>)
+      :<>{rows[0]&&<div style={{display:"flex",background:t.card2,borderBottom:`2px solid ${t.border}`}}>{rows[0].map((h,j)=><div key={j} style={{flex:1,padding:"10px 14px",fontSize:10,fontWeight:700,color:t.gold,letterSpacing:"0.08em",textTransform:"uppercase"}}>{h}</div>)}</div>}{data.map((r,i)=><div key={i} style={{display:"flex",borderBottom:i<data.length-1?`1px solid ${t.border}`:"none"}}>{r.map((c,j)=><div key={j} style={{flex:1,padding:"12px 14px",fontSize:13,color:j===0?t.text:t.muted,fontWeight:j===0?600:400}}>{c}</div>)}</div>)}</>}
+    </div>
   </div>);
 }
 
@@ -295,17 +299,24 @@ function MeteoDisplay({lines,t}){
 // ═══════════════════════════════════════════════════════════════
 function CalendrierDisplay({lines,t}){
   const entries=[];let currentGroup="";
-  for(const l of lines){const s=l.trim();if(!s||/^\|/.test(s))continue;
-    // Section header: **Malaga (2-10 juillet)** (bold without colon after)
+  // First: try to parse as table (| Date | Lieu | Activité |)
+  const tableRows=parseRows(lines);
+  if(tableRows.length>1){
+    const hdr=tableRows[0];const data=tableRows.slice(1);
+    // Skip header if it looks like column names
+    const isHdr=/date|jour|lieu|activ/i.test(hdr.join(" "));
+    const rows=isHdr?data:tableRows;
+    for(const r of rows){const date=r[0]||"";const rest=r.slice(1).filter(c=>c).join(" - ");entries.push({date:date.trim(),act:rest.trim()});}
+  }
+  // Then: parse bold/bullet formats
+  if(!entries.length){for(const l of lines){const s=l.trim();if(!s||/^\|/.test(s))continue;
     const hdr=s.match(/^\*\*([^*]+)\*\*\s*$/);
-    if(hdr){currentGroup=hdr[1].trim();entries.push({date:currentGroup,act:"",isHeader:true});continue;}
-    // Bold date: **date**: activity  OR  **date** activity
+    if(hdr){entries.push({date:hdr[1].trim(),act:"",isHeader:true});continue;}
     const bold=s.match(/^\*\*([^*]+)\*\*\s*[:\-·]?\s*(.*)/);
     if(bold){const date=bold[1].replace(/[:\-·]\s*$/,"").trim();const act=bold[2]?.trim()||"";if(date.length>2)entries.push({date,act});continue;}
-    // Bullet: - date : activity (split on : only, not -)
     const bullet=s.match(/^[-•]\s*(.+?)\s*:\s*(.*)/);
     if(bullet&&bullet[1].length>2){entries.push({date:bullet[1].trim(),act:bullet[2].trim()});continue;}
-  }
+  }}
   if(!entries.length)return<div style={{color:t.muted,fontSize:13}}>Calendrier non disponible</div>;
   const[openI,setOpenI]=useState(null);const colors=[t.gold,"#e05555",t.blue,"#9b59b6",t.green,"#e67e22"];
   return(<div style={{position:"relative"}}><div style={{position:"absolute",left:19,top:30,bottom:30,width:2,background:t.border}}/>
