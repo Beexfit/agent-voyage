@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from "react";
 // ═══════════════════════════════════════════════════════════════
 
 const AIRPORTS=[{code:"GVA",name:"Genève-Cointrin"},{code:"ZRH",name:"Zurich"},{code:"MXP",name:"Milan Malpensa"},{code:"CDG",name:"Paris CDG"},{code:"LHR",name:"Londres Heathrow"},{code:"BCN",name:"Barcelone"},{code:"FCO",name:"Rome Fiumicino"},{code:"AMS",name:"Amsterdam"},{code:"MAD",name:"Madrid"},{code:"DXB",name:"Dubai"},{code:"JFK",name:"New York JFK"},{code:"LAX",name:"Los Angeles"},{code:"BKK",name:"Bangkok"},{code:"SIN",name:"Singapour"},{code:"OTHER",name:"Autre"}];
-const VIBES=[{id:"beach",label:"🏖 Plage"},{id:"city",label:"🏙 Ville"},{id:"nature",label:"🌿 Nature"},{id:"party",label:"🎉 Fête"},{id:"gastro",label:"🍽 Gastro"},{id:"spa",label:"💆 Spa"},{id:"adventure",label:"🏄 Aventure"},{id:"romance",label:"💑 Romance"},{id:"luxury",label:"💎 Luxe"},{id:"family",label:"👨‍👩‍👧 Famille"}];
+const VIBES=[{id:"beach",label:"Plage"},{id:"city",label:"Ville"},{id:"nature",label:"Nature"},{id:"party",label:"Fête"},{id:"gastro",label:"Gastro"},{id:"spa",label:"Spa"},{id:"adventure",label:"Aventure"},{id:"romance",label:"Romance"},{id:"luxury",label:"Luxe"},{id:"family",label:"Famille"}];
 const ACTIVITIES=[{id:"surf",label:"Surf"},{id:"golf",label:"Golf"},{id:"diving",label:"Plongée"},{id:"hiking",label:"Rando"},{id:"restaurants",label:"Restos"},{id:"shopping",label:"Shopping"},{id:"clubs",label:"Clubs"},{id:"yoga",label:"Yoga"},{id:"museums",label:"Musées"},{id:"sailing",label:"Voile"},{id:"snorkeling",label:"Snorkeling"},{id:"tennis",label:"Tennis"}];
 const LOYALTY=[{id:"revolut_ultra",short:"Revolut Ultra"},{id:"amex_ch",short:"Amex"},{id:"ubs_infinite",short:"UBS Visa"},{id:"miles_more",short:"Miles & More"},{id:"marriott_bonvoy",short:"Marriott Bonvoy"},{id:"hilton_honors",short:"Hilton Honors"},{id:"world_of_hyatt",short:"World of Hyatt"},{id:"diners_club",short:"Diners Club"}];
 const POINTS_MARKS=[0,5000,10000,15000,20000,25000,30000,40000,50000,75000,100000];
@@ -57,8 +57,8 @@ function RecapDisplay({lines,t}){
   }
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-      <div style={{background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>🌙</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{nights||"–"}</div><div style={{fontSize:12,color:t.muted}}>nuits</div></div>
-      <div style={{background:`${t.blue}10`,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>👤</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{voy}</div><div style={{fontSize:12,color:t.muted}}>voyageur</div></div>
+      <div style={{background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:t.goldD,letterSpacing:"0.08em",marginBottom:8}}>NUITS</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{nights||"–"}</div></div>
+      <div style={{background:`${t.blue}10`,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:t.blue,letterSpacing:"0.08em",marginBottom:8}}>VOYAGEUR</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{voy}</div></div>
     </div>
     <div style={{borderRadius:12,border:`1px solid ${t.border}`,overflow:"hidden"}}>{data.map((r,i)=><div key={i} style={{display:"flex",borderBottom:i<data.length-1?`1px solid ${t.border}`:"none",padding:"12px 14px"}}><div style={{width:130,flexShrink:0,fontSize:13,fontWeight:600,color:t.text}}>{r[0]}</div><div style={{fontSize:13,color:t.muted,lineHeight:1.5}}>{r[1]}</div></div>)}</div>
   </div>);
@@ -77,10 +77,10 @@ function FlightDisplay({lines,t}){
   for(const vol of vols)vol.rows=parseFlightRows(vol.lines);
 
   const match=(scenario,c)=>{const s=scenario.toLowerCase();if(c==="business")return/business|💺/i.test(s)&&!/éco|eco|🔀/i.test(s);if(c==="mixte")return/mixte|🔀|éco.*biz|biz.*retour/i.test(s);return/économie|🪑|full éco/i.test(s);};
-  const tabs=[{id:"business",e:"💺",l:"Full Business"},{id:"mixte",e:"🔀",l:"Mixte"},{id:"eco",e:"🪑",l:"Économie"}];
+  const tabs=[{id:"business",e:"",l:"Business"},{id:"mixte",e:"",l:"Mixte"},{id:"eco",e:"",l:"Économie"}];
 
   return(<div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.e} {tab.l}</button>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.l}</button>)}</div>
     {vols.map((vol,vi)=>{
       const filtered=vol.rows.filter(r=>match(r[0]||"",cls));
       if(!filtered.length)return<div key={vi} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:20,marginBottom:12,textAlign:"center"}}>{vol.title&&<div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>{vol.title}</div>}<div style={{color:t.muted,fontSize:13}}>Pas de vol dans cette classe</div></div>;
@@ -138,10 +138,26 @@ function HotelCard({name,lines,t}){
   // Prose (non-table, non-IMAGES)
   const prose=lines.filter(l=>{const s=l.trim();return s&&!/^\|/.test(s)&&!/^#/.test(s)&&!/^IMAGES:/i.test(s)&&!/^http/i.test(s);}).slice(0,3);
   // Chips
-  const chips=[];if(equip)equip.split(",").forEach(s=>{const v=s.trim();if(v.length>1)chips.push(v);});
-  if(piscine&&!/non/i.test(piscine))chips.push("Piscine");if(spa&&!/non/i.test(spa))chips.push("Spa");
-  if(petitDej&&/inclus|gratuit|oui/i.test(petitDej))chips.push("Petit-déj inclus");
-  if(vue)chips.push(vue.split(",")[0].substring(0,30));
+  // Build chips - aim for 5-6 indicators minimum
+  const chips=[];
+  // From equipements field
+  if(equip)equip.split(",").forEach(s=>{const v=s.trim();if(v.length>2)chips.push(v);});
+  // Dedicated fields
+  if(piscine&&!/non/i.test(piscine)){const detail=piscine.replace(/oui\s*[-–]?\s*/i,"").trim();chips.push(detail||"Piscine");}
+  if(spa&&!/non/i.test(spa)){const detail=spa.replace(/oui\s*[-–]?\s*/i,"").trim();chips.push(detail||"Spa");}
+  if(petitDej){if(/inclus|gratuit|oui/i.test(petitDej))chips.push("Petit-déjeuner inclus");else if(/option/i.test(petitDej))chips.push("Petit-déjeuner en option");}
+  if(vue)chips.push(vue.split(",")[0].substring(0,35));
+  if(chambre&&!chips.some(c=>/chambre/i.test(c)))chips.push(chambre.split(",")[0].substring(0,35));
+  // Fallback extras if <5 chips: infer from hotel name and description
+  const allText=(prose.join(" ")+" "+equip+" "+name).toLowerCase();
+  if(chips.length<6&&/wifi|wi-fi/i.test(allText)&&!chips.some(c=>/wifi/i.test(c)))chips.push("WiFi gratuit");
+  if(chips.length<6&&/climati/i.test(allText)&&!chips.some(c=>/clim/i.test(c)))chips.push("Climatisation");
+  if(chips.length<6&&/fitness|gym|sport/i.test(allText)&&!chips.some(c=>/fitness|gym/i.test(c)))chips.push("Fitness center");
+  if(chips.length<6&&/concierge/i.test(allText))chips.push("Conciergerie");
+  if(chips.length<6&&/restaurant/i.test(allText)&&!chips.some(c=>/restau/i.test(c)))chips.push("Restaurant");
+  if(chips.length<6&&/bar/i.test(allText)&&!chips.some(c=>/bar/i.test(c)))chips.push("Bar");
+  if(chips.length<6)chips.push("Lit double");
+  if(chips.length<6)chips.push("Salle de bain privée");
   const rN=parseFloat(noteNum||"0");const rC=rN>=9?"#16a34a":rN>=8?"#1d8348":"#2e7d32";
   const heroImg=imgs[0]||`https://source.unsplash.com/800x400/?luxury+hotel+${encodeURIComponent(name.split(/[,(]/)[0].trim())}`;
 
@@ -150,7 +166,7 @@ function HotelCard({name,lines,t}){
     {open&&<>
       <div style={{height:200,overflow:"hidden",position:"relative"}}>
         {!imgErr?<img src={heroImg} alt={name} crossOrigin="anonymous" referrerPolicy="no-referrer" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c,#0f3460)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div><span style={{fontSize:32,display:"block",marginBottom:6}}>🏨</span>Photos sur le site officiel</div></div>}
+        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c,#0f3460)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div>Photos sur le site officiel</div></div>}
         {imgs.length>1&&<div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff"}}>{imgs.length} photos</div>}
       </div>
       <div style={{padding:"16px 20px"}}>
@@ -220,10 +236,10 @@ function MeteoDisplay({lines,t}){
   return(<div>
     {filtered.length>1&&<Tabs items={filtered.map(d=>d.name||"Météo")} active={idx} onChange={setIdx} t={t}/>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-      {maxT&&<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:6}}>☀️</div><div style={{fontSize:24,fontWeight:900,color:t.gold,fontFamily:MO}}>{maxT}°</div>{minT&&minT!==maxT&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>min {minT}°</div>}<div style={{fontSize:10,color:t.muted,marginTop:3}}>Température</div></div>}
-      {seaT&&<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:6}}>🌊</div><div style={{fontSize:24,fontWeight:900,color:t.blue,fontFamily:MO}}>{seaT}°</div><div style={{fontSize:10,color:t.muted,marginTop:3}}>Mer</div></div>}
-      <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:6}}>{/rare|sec|aucun/i.test(src)?"☀️":"🌦️"}</div><div style={{fontSize:13,fontWeight:700,color:t.text}}>{/rare|sec|aucun/i.test(src)?"Rares":"Modérées"}</div><div style={{fontSize:10,color:t.muted,marginTop:3}}>Précipitations</div></div>
-      <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:6}}>🕶</div><div style={{fontSize:13,fontWeight:700,color:t.text}}>{/élevé|fort/i.test(src)?"Élevé":"Modéré"}</div><div style={{fontSize:10,color:t.muted,marginTop:3}}>UV</div></div>
+      {maxT&&<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:t.goldD,letterSpacing:"0.08em",marginBottom:8}}>TEMP.</div><div style={{fontSize:24,fontWeight:900,color:t.gold,fontFamily:MO}}>{maxT}°</div>{minT&&minT!==maxT&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>min {minT}°</div>}</div>}
+      {seaT&&<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:t.blue,letterSpacing:"0.08em",marginBottom:8}}>MER</div><div style={{fontSize:24,fontWeight:900,color:t.blue,fontFamily:MO}}>{seaT}°</div></div>}
+      <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:t.muted,letterSpacing:"0.08em",marginBottom:8}}>PLUIE</div><div style={{fontSize:13,fontWeight:700,color:t.text}}>{/rare|sec|aucun/i.test(src)?"Rares":"Modérées"}</div></div>
+      <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:t.muted,letterSpacing:"0.08em",marginBottom:8}}>UV</div><div style={{fontSize:13,fontWeight:700,color:t.text}}>{/élevé|fort/i.test(src)?"Élevé":"Modéré"}</div></div>
     </div>
     {prose.map((l,i)=><p key={i} style={{margin:"0 0 6px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(l)}}/>)}
   </div>);
@@ -242,13 +258,13 @@ function CalendrierDisplay({lines,t}){
   return(<div style={{position:"relative"}}><div style={{position:"absolute",left:19,top:30,bottom:30,width:2,background:t.border}}/>
     {entries.map((e,i)=>{const isEnd=i===0||i===entries.length-1;const c=colors[i%colors.length];const isO=openI===i;
     return<div key={i} style={{display:"flex",gap:12,marginBottom:12,position:"relative"}}>
-      <div style={{width:40,height:40,borderRadius:"50%",background:isEnd?t.gold:t.card2,border:`2px solid ${isEnd?t.gold:c}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1,marginTop:4}}><span style={{fontSize:14}}>{i===0?"🛫":i===entries.length-1?"🛬":"📍"}</span></div>
+      <div style={{width:40,height:40,borderRadius:"50%",background:isEnd?t.gold:t.card2,border:`2px solid ${isEnd?t.gold:c}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1,marginTop:4}}><span style={{fontSize:12,fontWeight:800,color:isEnd?"#0a0a0a":c}}>{i+1}</span></div>
       <div style={{flex:1}}>
         <button onClick={()=>setOpenI(isO?null:i)} style={{width:"100%",textAlign:"left",background:t.card2,border:`1px solid ${isEnd?t.gold:t.border}`,borderRadius:isO?"12px 12px 0 0":"12px",padding:"12px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div style={{flex:1}}><div style={{fontSize:11,fontWeight:800,color:c,letterSpacing:"0.06em"}}>{e.date.toUpperCase()}</div>{e.act&&<div style={{fontSize:13,color:t.muted,lineHeight:1.5,marginTop:3}} dangerouslySetInnerHTML={{__html:inline(e.act)}}/>}</div>
           <span style={{color:t.muted,fontSize:12,marginLeft:8,flexShrink:0}}>{isO?"▲":"▼"}</span>
         </button>
-        {isO&&<div style={{background:t.card,border:`1px solid ${t.border}`,borderTop:"none",borderRadius:"0 0 12px 12px",padding:16}}><div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>ACTIVITÉS SUGGÉRÉES</div><div style={{fontSize:13,color:t.muted,lineHeight:1.7}}>Utilisez le chat 💬 pour demander des suggestions d'activités détaillées pour cette période.</div></div>}
+        {isO&&<div style={{background:t.card,border:`1px solid ${t.border}`,borderTop:"none",borderRadius:"0 0 12px 12px",padding:16}}><div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>ACTIVITÉS SUGGÉRÉES</div><div style={{fontSize:13,color:t.muted,lineHeight:1.7}}>Utilisez le chat pour demander des suggestions d'activités détaillées pour cette période.</div></div>}
       </div>
     </div>;})}
   </div>);
@@ -334,12 +350,12 @@ export default function App(){
 
       {/* Collapsible form when results shown */}
       {phase==="done"&&result&&<button onClick={()=>setFormOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:t.card,border:`1px solid ${t.border}`,borderRadius:formOpen?"14px 14px 0 0":14,cursor:"pointer",marginBottom:formOpen?0:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}><span>🔍</span><span style={{fontSize:13,fontWeight:600,color:t.text}}>Modifier la recherche</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:13,fontWeight:600,color:t.text}}>Modifier la recherche</span></div>
         <span style={{color:t.muted}}>{formOpen?"−":"+"}</span>
       </button>}
 
       {(formOpen||phase!=="done")&&<div style={{background:phase==="done"?t.card:"transparent",border:phase==="done"?`1px solid ${t.border}`:"none",borderTop:phase==="done"?"none":undefined,borderRadius:phase==="done"?"0 0 14px 14px":0,padding:phase==="done"?"14px 0 0":0,marginBottom:10}}>
-        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",padding:phase==="done"?"0 14px":"0"}}>{[{id:"trips",label:"🗺 Trips"},{id:"vols",label:"✈️ Vols"},{id:"hotels",label:"🏨 Hôtels"}].map(tab=><button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:"8px 16px",borderRadius:20,border:`1px solid ${activeTab===tab.id?t.gold:t.border}`,background:activeTab===tab.id?t.gold:"transparent",color:activeTab===tab.id?"#0a0a0a":t.muted,fontSize:12,fontWeight:activeTab===tab.id?700:500,cursor:"pointer"}}>{tab.label}</button>)}</div>
+        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",padding:phase==="done"?"0 14px":"0"}}>{[{id:"trips",label:"Trips"},{id:"vols",label:"Vols"},{id:"hotels",label:"Hôtels"}].map(tab=><button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:"8px 16px",borderRadius:20,border:`1px solid ${activeTab===tab.id?t.gold:t.border}`,background:activeTab===tab.id?t.gold:"transparent",color:activeTab===tab.id?"#0a0a0a":t.muted,fontSize:12,fontWeight:activeTab===tab.id?700:500,cursor:"pointer"}}>{tab.label}</button>)}</div>
         <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:"14px 18px",marginBottom:10}}><Lbl t={t}>Fidélité</Lbl><LoyaltySelector selected={loyaltyCards} onChange={setLoyaltyCards} points={loyaltyPoints} onPoints={setLoyaltyPoints} t={t}/></div>
         <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:16,overflow:"hidden",marginBottom:10}}>
           <div style={{padding:"14px 18px",borderBottom:`1px solid ${t.border}`,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><Lbl t={t}>Voyageurs</Lbl><select value={travelers} onChange={e=>setTravelers(e.target.value)} style={INP}>{[1,2,3,4,5,6].map(n=><option key={n} value={n}>{n} pers.</option>)}</select></div><div><Lbl t={t}>Bagages</Lbl><select value={baggage} onChange={e=>setBaggage(e.target.value)} style={INP}>{BAGGAGE_OPTIONS.map(b=><option key={b.id} value={b.id}>{b.label}</option>)}</select></div></div>
