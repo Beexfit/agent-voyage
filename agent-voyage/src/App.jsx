@@ -353,7 +353,7 @@ function ResultsView({text,t}){
       <button onClick={()=>setShowSrc(!showSrc)} style={{width:"100%",padding:"14px 18px",background:t.goldBg2,border:"none",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,fontWeight:700,color:t.gold}}>📋 Texte brut de l'API</span><span style={{color:t.gold,fontSize:14}}>{showSrc?"▲":"▼"}</span></button>
       {showSrc&&<div style={{padding:14}}><div style={{fontSize:11,color:t.muted,marginBottom:8}}>Clique dans le champ puis copie tout</div><textarea readOnly value={text} style={{width:"100%",minHeight:400,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:11,fontFamily:MO,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
     </div>
-    {sections.map((sec,i)=>{const ti=sec.title.toLowerCase();const isR=/récap/i.test(ti);const isV=/vols?\b/i.test(ti)&&!/revolut|astuce|fidél/i.test(ti);const isH=/héberg/i.test(ti);const isT=/total|coût/i.test(ti);const isM=/météo|meteo/i.test(ti);const isC=/calendrier|planning/i.test(ti);const isRe=/recommand/i.test(ti);const isF=/revolut|astuce|fidél/i.test(ti);
+    {sections.map((sec,i)=>{const ti=sec.title.toLowerCase();const isR=/récap/i.test(ti);const isV=/vols?\b/i.test(ti)&&!/revolut|astuce|fidél/i.test(ti);const isH=/héberg/i.test(ti);const isT=/totaux|total|coût/i.test(ti);const isM=/météo|meteo/i.test(ti);const isC=/calendrier|planning/i.test(ti);const isRe=/recommand/i.test(ti);const isF=/revolut|astuce|fidél/i.test(ti);
     return(<Sec key={i} title={sec.title} t={t} open={isR||isV||isH} accent={isT}>{isR?<RecapDisplay lines={sec.lines} t={t}/>:isV?<FlightDisplay lines={sec.lines} t={t}/>:isH?<HebergementDisplay lines={sec.lines} t={t}/>:isT?<TotauxDisplay lines={sec.lines} t={t}/>:isM?<MeteoDisplay lines={sec.lines} t={t}/>:isC?<CalendrierDisplay lines={sec.lines} t={t}/>:isRe?<RecoDisplay lines={sec.lines} t={t}/>:isF?<FideliteDisplay lines={sec.lines} t={t}/>:<div>{sec.lines.filter(l=>l.trim()).map((l,j)=><p key={j} style={{margin:"0 0 6px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(l)}}/>)}</div>}</Sec>);})}
   </div>);
 }
@@ -458,7 +458,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.4</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.5</div>
       <ChatWidget t={t}/>
     </div>
   );
