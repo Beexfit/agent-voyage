@@ -15,7 +15,9 @@ const TIPS=["Recherche des vols sur Kayak...","Consultation de Skyscanner...","V
 const DARK={bg:"#0a0a0a",card:"#141414",card2:"#1c1c1c",input:"#202020",border:"#2a2218",text:"#f5f0e8",muted:"#999",faint:"#444",gold:"#c9a96e",goldD:"#a07840",goldBg:"rgba(201,169,110,0.06)",goldBg2:"rgba(201,169,110,0.12)",green:"#22c55e",red:"#ef4444",blue:"#5b9bd5"};
 const LIGHT={bg:"#f5f3ef",card:"#ffffff",card2:"#f0ede7",input:"#faf9f7",border:"#e0dcd4",text:"#1a1a1a",muted:"#6a6560",faint:"#ccc",gold:"#a6872f",goldD:"#8a7535",goldBg:"rgba(166,135,47,0.06)",goldBg2:"rgba(166,135,47,0.12)",green:"#3a8f4a",red:"#c94444",blue:"#3a7abf"};
 const FN="'DM Sans','Helvetica Neue',system-ui,sans-serif",MN="'JetBrains Mono','SF Mono',monospace";
-const fmt=n=>{try{return parseInt(String(n).replace(/['\s]/g,"")).toLocaleString("fr-CH")}catch{return n}};
+const fmt=n=>{try{const s=String(n).replace(/['\s]/g,"").replace(/CHF/gi,"").trim();const v=parseInt(s);return isNaN(v)?n:v.toLocaleString("fr-CH")}catch{return n}};
+
+// ── RESPONSIVE HOOK ──
 function useW(){const[w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);return w;}
 
 // ── PARSERS ──
@@ -23,11 +25,13 @@ function clean(t){if(!t)return"";return t.replace(/[—–]/g," - ");}
 function renderInline(s){return(s||"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,`<a href="$2" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">$1 ↗</a>`);}
 function parseSections(text){const lines=clean(text).split("\n");const secs=[];let cur=null;for(const l of lines){const h2=l.match(/^## (.+)/);if(h2){if(cur)secs.push(cur);cur={title:h2[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);}if(cur)secs.push(cur);return secs;}
 function titleParts(t){const m=t.match(/^([\u{1F300}-\u{1FFFF}][\uFE0F\u200D]*)+\s*/u);return m?{icon:m[0].trim(),label:t.slice(m[0].length).trim()}:{icon:"",label:t};}
-function parseTableRows(lines){const rows=[];for(const l of lines){const s=l.trim();if(s.startsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim());if(cells.length>=2)rows.push(cells);}}return rows;}
-function parseKV(lines){const d={};for(const l of lines){const s=l.trim();if(s.startsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim());if(cells.length>=2&&cells[0])d[cells[0]]=cells[1];}}return d;}
+// Preprocess lines: join broken table rows (API sometimes puts newlines inside cells)
+function fixTableLines(lines){const out=[];for(let i=0;i<lines.length;i++){const l=lines[i];if(l.trim().startsWith("|")){let row=l;while(i+1<lines.length&&!lines[i+1].trim().startsWith("|")&&!lines[i+1].trim().startsWith("#")&&!lines[i+1].trim().startsWith("*")&&lines[i+1].trim()!==""){i++;row=row.trimEnd()+" "+lines[i].trim();}out.push(row);}else out.push(l);}return out;}
+function parseTableRows(lines){const fixed=fixTableLines(lines);const rows=[];for(const l of fixed){const s=l.trim();if(s.startsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim().replace(/\s+/g," "));if(cells.length>=2)rows.push(cells);}}return rows;}
+function parseKV(lines){const fixed=fixTableLines(lines);const d={};for(const l of fixed){const s=l.trim();if(s.startsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim().replace(/\s+/g," "));if(cells.length>=2&&cells[0])d[cells[0]]=cells[1];}}return d;}
 
 // ── UI PRIMITIVES ──
-function Sec({icon,title,children,t,defaultOpen=false,accent=false,mob}){const[o,setO]=useState(defaultOpen);const{icon:ti,label}=typeof title==="string"?titleParts(title):{icon:"",label:title};return(<div style={{background:t.card,border:`1px solid ${accent?t.gold:t.border}`,borderRadius:14,marginBottom:10,overflow:"hidden"}}><button onClick={()=>setO(x=>!x)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:mob?"14px 16px":"16px 20px",background:"none",border:"none",cursor:"pointer",borderBottom:o?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:10}}>{(icon||ti)&&<span style={{fontSize:16}}>{icon||ti}</span>}<span style={{fontSize:13,fontWeight:700,color:accent?t.gold:t.text,fontFamily:FN}}>{label}</span></div><span style={{color:t.muted,fontSize:18,fontWeight:300}}>{o?"−":"+"}</span></button>{o&&<div style={{padding:mob?"14px 16px":"18px 22px"}}>{children}</div>}</div>);}
+function Sec({icon,title,children,t,defaultOpen=false,accent=false,mob}){const[o,setO]=useState(defaultOpen);const{icon:ti,label}=typeof title==="string"?titleParts(title):{icon:"",label:title};return(<div style={{background:t.card,border:`1px solid ${accent?t.gold:t.border}`,borderRadius:14,marginBottom:10,overflow:"hidden"}}><button onClick={()=>setO(x=>!x)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"none",border:"none",cursor:"pointer",borderBottom:o?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:10}}>{(icon||ti)&&<span style={{fontSize:16}}>{icon||ti}</span>}<span style={{fontSize:13,fontWeight:700,color:accent?t.gold:t.text,fontFamily:FN}}>{label}</span></div><span style={{color:t.muted,fontSize:18,fontWeight:300}}>{o?"−":"+"}</span></button>{o&&<div style={{padding:"14px 20px"}}>{children}</div>}</div>);}
 function Lbl({children,t}){return<div style={{fontSize:10,fontWeight:600,letterSpacing:"0.1em",color:t.muted,marginBottom:6,textTransform:"uppercase",fontFamily:FN}}>{children}</div>;}
 function ChipBtn({label,selected,onClick,t}){return<button type="button" onClick={onClick} style={{padding:"7px 15px",borderRadius:20,border:`1px solid ${selected?t.gold:t.border}`,background:selected?t.goldBg2:"transparent",color:selected?t.gold:t.muted,fontSize:12,cursor:"pointer",fontFamily:FN,whiteSpace:"nowrap"}}>{label}</button>;}
 function DestTab({labels,active,onChange,t}){return<div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{labels.map((l,i)=><button key={i} onClick={()=>onChange(i)} style={{padding:"8px 16px",borderRadius:20,border:`1px solid ${i===active?t.gold:t.border}`,background:i===active?t.goldBg2:"transparent",color:i===active?t.gold:t.muted,fontSize:12,fontWeight:i===active?700:400,cursor:"pointer",fontFamily:FN}}>{l}</button>)}</div>;}
@@ -137,24 +141,34 @@ function HotelCardV2({name,lines,t,mob}){
   const lien=get("lien")||"";const linkM=lien.match(/\[([^\]]+)\]\(([^)]+)\)/);
   // Prose
   const prose=lines.filter(l=>{const s=l.trim();return s&&!/^\|/.test(s)&&!/^#{1,4}/.test(s);}).slice(0,3);
-  // Chips
+  // Chips - no emojis
   const chips=[];
   if(equipements)equipements.split(",").forEach(s=>{const v=s.trim();if(v.length>1)chips.push(v);});
-  if(piscine&&!/non/i.test(piscine))chips.push("🏊 Piscine");
-  if(spa&&!/non/i.test(spa))chips.push("💆 Spa");
-  if(petitDej&&/gratuit|inclus|oui/i.test(petitDej))chips.push("🍳 Petit-déj inclus");
-  if(vue)chips.push("🌅 "+vue.split(",")[0].trim().substring(0,30));
+  if(piscine&&!/non/i.test(piscine))chips.push("Piscine");
+  if(spa&&!/non/i.test(spa))chips.push("Spa");
+  if(petitDej&&/gratuit|inclus|oui/i.test(petitDej))chips.push("Petit-déj inclus");
+  if(vue)chips.push(vue.split(",")[0].trim().substring(0,30));
   const rN=parseFloat(noteNum||"0");const rC=rN>=9?"#16a34a":rN>=8?"#1d8348":"#2e7d32";
+  // Image: Unsplash fallback based on hotel name
+  const imgQuery=encodeURIComponent(name.replace(/[^\w\s]/g,"").trim());
+  const imgUrl=`https://source.unsplash.com/800x400/?hotel,${imgQuery}`;
+  const[imgErr,setImgErr]=useState(false);
 
   return(<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:14,marginBottom:14,overflow:"hidden"}}>
     <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${t.border}`:"none"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{stars>0&&<span style={{color:t.gold,fontSize:12}}>{"★".repeat(stars)}</span>}<span style={{fontSize:15,fontWeight:700,color:t.text,fontFamily:FN}}>{name}</span></div>
       <span style={{color:t.muted,fontSize:16}}>{open?"−":"+"}</span>
     </button>
-    {open&&<div style={{padding:mob?"14px":"20px"}}>
+    {open&&<>
+      {/* Hotel image */}
+      <div style={{height:180,overflow:"hidden"}}>
+        {!imgErr?<img src={imgUrl} alt={name} onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c 0%,#0f3460 50%,#1a1f3c 100%)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div><span style={{fontSize:32,display:"block",marginBottom:6}}>🏨</span>Consulter le site pour les photos</div></div>}
+      </div>
+      <div style={{padding:"16px 20px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,flexWrap:"wrap",gap:12}}>
         <div style={{flex:1,minWidth:200}}>
-          {zone&&<div style={{fontSize:13,color:t.muted,marginBottom:6}}>📍 {zone}</div>}
+          {zone&&<div style={{fontSize:13,color:t.muted,marginBottom:6}}>{zone}</div>}
           {pN&&<div style={{display:"flex",alignItems:"baseline",gap:6,flexWrap:"wrap"}}><span style={{fontSize:28,fontWeight:900,color:t.gold,fontFamily:MN}}>{fmt(pN)}</span><span style={{fontSize:13,color:t.muted}}>CHF / nuit</span>{pT&&<span style={{fontSize:13,color:t.muted}}>· {fmt(pT)} CHF total</span>}</div>}
         </div>
         {noteNum&&<div style={{background:rC,borderRadius:"10px 10px 10px 0",padding:"10px 14px",textAlign:"center",minWidth:50}}><div style={{fontSize:20,fontWeight:900,color:"#fff"}}>{noteNum}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.8)"}}>/ 10</div></div>}
@@ -163,7 +177,7 @@ function HotelCardV2({name,lines,t,mob}){
       {prose.length>0&&<p style={{fontSize:13,color:t.muted,lineHeight:1.7,margin:"8px 0 14px"}} dangerouslySetInnerHTML={{__html:renderInline(prose.join(" ").replace(/\*\*/g,""))}}/>}
       {chips.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>{chips.slice(0,8).map((c,i)=><span key={i} style={{fontSize:11,color:t.muted,background:t.card,border:`1px solid ${t.border}`,padding:"5px 12px",borderRadius:20,fontFamily:FN}}>✓ {c}</span>)}</div>}
       {linkM&&<a href={linkM[2]} target="_blank" rel="noopener" style={{display:"inline-block",padding:"12px 22px",background:t.gold,color:"#0a0a0a",borderRadius:10,fontSize:13,fontWeight:700,textDecoration:"none"}}>Réserver ↗</a>}
-    </div>}
+    </div></>}
   </div>);
 }
 
@@ -174,7 +188,21 @@ function HotelCardV2({name,lines,t,mob}){
 function RecapDisplay({lines,t,mob}){const rows=parseTableRows(lines);const header=rows[0];const data=rows.slice(1);if(!data.length)return null;const totalNights=data.reduce((s,r)=>{const m=(r[2]||"").match(/(\d+)/);return s+(m?parseInt(m[1]):0);},0);
 return(<div><div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:10,marginBottom:16}}><div style={{background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>🌙</div><div style={{fontSize:32,fontWeight:900,color:t.text,fontFamily:FN}}>{totalNights||"–"}</div><div style={{fontSize:12,color:t.muted}}>nuits</div></div><div style={{background:`${t.blue}10`,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>👤</div><div style={{fontSize:32,fontWeight:900,color:t.text,fontFamily:FN}}>{data[0]?.[3]?.match(/(\d+)/)?.[1]||"1"}</div><div style={{fontSize:12,color:t.muted}}>voyageur</div></div></div><div style={{overflowX:"auto",borderRadius:12,border:`1px solid ${t.border}`}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,fontFamily:FN}}>{header&&<thead><tr style={{background:t.card2}}>{header.map((h,i)=><th key={i} style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:t.gold,fontSize:10,letterSpacing:"0.1em",textTransform:"uppercase",borderBottom:`2px solid ${t.border}`}}>{h}</th>)}</tr></thead>}<tbody>{data.map((r,i)=><tr key={i} style={{borderBottom:`1px solid ${t.border}`}}>{r.map((c,j)=><td key={j} style={{padding:"12px 14px",color:j===0?t.text:t.muted,fontWeight:j===0?600:400}}>{c}</td>)}</tr>)}</tbody></table></div></div>);}
 
-function TotauxDisplay({lines,t,mob}){const rows=parseTableRows(lines);const header=rows[0];const data=rows.slice(1);if(!data.length)return null;return(<div style={{overflowX:"auto",borderRadius:12,border:`1px solid ${t.border}`}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:mob?12:13,fontFamily:FN}}>{header&&<thead><tr style={{background:t.card2}}>{header.map((h,i)=><th key={i} style={{padding:mob?"8px 10px":"10px 14px",textAlign:"left",fontWeight:700,color:t.gold,fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",borderBottom:`2px solid ${t.border}`,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>}<tbody>{data.map((r,i)=><tr key={i} style={{background:i===0?t.goldBg:"transparent",borderBottom:`1px solid ${t.border}`}}>{r.map((c,j)=><td key={j} style={{padding:mob?"8px 10px":"12px 14px",color:j===r.length-1?t.gold:j===0?t.text:t.muted,fontWeight:j===0||j===r.length-1?700:400,fontFamily:j>0?MN:FN,whiteSpace:"nowrap"}}>{j>0?fmt(c):c}</td>)}</tr>)}</tbody></table></div>);}
+function TotauxDisplay({lines,t,mob}){const rows=parseTableRows(lines);const header=rows[0];const data=rows.slice(1);if(!data.length)return null;
+const[activeIdx,setActiveIdx]=useState(0);const active=data[activeIdx]||data[0];
+// Estimate activities budget based on total (roughly 10-15% of trip cost)
+const totalVal=parseInt(String(active[active.length-1]||"0").replace(/['\s]/g,"").replace(/CHF/gi,""))||0;
+const actEst=Math.round(totalVal*0.12/100)*100;
+return(<div>
+  {/* Scenario tabs */}
+  <div style={{display:"grid",gridTemplateColumns:`repeat(${data.length},1fr)`,borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{data.map((r,i)=>{const isActive=i===activeIdx;const total=r[r.length-1]||"";return<button key={i} onClick={()=>setActiveIdx(i)} style={{padding:"14px 8px",textAlign:"center",background:isActive?t.goldBg2:t.card2,color:isActive?t.gold:t.muted,border:"none",borderBottom:isActive?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN}}><div style={{fontSize:11,fontWeight:700,lineHeight:1.4}}>{(r[0]||"").substring(0,25)}</div><div style={{fontSize:20,fontWeight:900,marginTop:4,fontFamily:MN}}>{fmt(total)}</div><div style={{fontSize:10,marginTop:2}}>CHF</div></button>})}</div>
+  {/* Breakdown */}
+  <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,overflow:"hidden"}}>
+    {header&&active&&header.slice(1).map((h,i)=>{const val=active[i+1]||"";if(!val)return null;const isTotal=i===header.length-2;return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderBottom:isTotal?"none":`1px solid ${t.border}`,background:isTotal?t.goldBg:"transparent"}}><span style={{fontSize:13,fontWeight:isTotal?700:400,color:isTotal?t.gold:t.text,fontFamily:FN}}>{h}</span><span style={{fontSize:isTotal?20:14,fontWeight:isTotal?900:600,color:isTotal?t.gold:t.text,fontFamily:MN}}>{fmt(val)} CHF</span></div>;})}
+    {/* Activities estimate */}
+    {actEst>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${t.border}`,background:t.goldBg}}><div><span style={{fontSize:13,fontWeight:600,color:t.text,fontFamily:FN}}>Activités estimées</span><div style={{fontSize:10,color:t.muted,marginTop:2}}>Restaurants, excursions, transports locaux</div></div><span style={{fontSize:14,fontWeight:700,color:t.muted,fontFamily:MN}}>~{fmt(actEst)} CHF</span></div>}
+  </div>
+</div>);}
 
 function MeteoDisplay({lines,t,mob}){
   const[destIdx,setDestIdx]=useState(0);
@@ -256,9 +284,9 @@ function DateFlexCell({value,onChange,flex,onFlexChange,t}){const S={width:"100%
 // ═══════════════════════════════════════════════════════════════
 export default function App(){
   const w=useW();const mob=w<700;
-  const[isDark,setIsDark]=useState(true);const[showRaw,setShowRaw]=useState(false);const t=isDark?DARK:LIGHT;
+  const[isDark,setIsDark]=useState(true);const t=isDark?DARK:LIGHT;
   useEffect(()=>{document.body.style.background=t.bg;document.body.style.margin="0";document.documentElement.style.background=t.bg;},[t.bg]);
-  const[activeTab,setActiveTab]=useState("trips");
+  const[activeTab,setActiveTab]=useState("trips");const[formOpen,setFormOpen]=useState(true);
   const[loyaltyCards,setLoyaltyCards]=useState([]);const[loyaltyPoints,setLoyaltyPoints]=useState(0);
   const[from,setFrom]=useState("GVA");const[fromCustom,setFromCustom]=useState("");
   const[legs,setLegs]=useState([{to:"",depDate:"",retDate:"",depFlex:0,retFlex:0}]);
@@ -274,45 +302,58 @@ export default function App(){
   const INP_RO={...INP,color:t.muted,cursor:"default",background:t.card2};
 
   const buildPrompt=()=>{const airport=from==="OTHER"?fromCustom.toUpperCase():from;const vibeLabels=VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ");const actLabels=ACTIVITIES.filter(a=>activities.includes(a.id)).map(a=>a.label).join(", ");const legLines=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?airport:(legs[i-1].to||airport);const parts=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.depDate)parts.push(`départ ${l.depDate}${l.depFlex>0?` (flexible ±${l.depFlex} jours)`:""}`);if(l.retDate)parts.push(i===legs.length-1?`retour ${l.retDate}${l.retFlex>0?` (flexible ±${l.retFlex} jours)`:""}`:`arrivée ${l.retDate}${l.retFlex>0?` (flexible ±${l.retFlex} jours)`:""}`);return"✈️ "+parts.join(" - ");});const bagLabel=BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label||"";const loyaltyInfo=loyaltyCards.length>0?`🎫 Programmes : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")} - ${loyaltyPoints>=100000?">100k":loyaltyPoints.toLocaleString("fr-CH")} pts`:"";return["Planifie ce voyage, recherche tous les prix en temps réel :",`Aéroport de base : ${airport}`,...legLines,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${bagLabel}`:"",loyaltyInfo,vibeLabels?`Ambiance : ${vibeLabels}`:"",actLabels?`Activités : ${actLabels}`:"",notes?`Notes : ${notes}`:"","","FORMAT OBLIGATOIRE : Pour chaque vol, inclure heure de départ et heure d'arrivée dans le tableau. Pour la météo multi-destination, utiliser ### Ville (Mois) comme sous-titres. Pour les hébergements multi-destination, utiliser ### Ville (dates) puis #### Nom Hôtel. Tableau complet par vol avec 3 scénarios, totaux CHF, liens Booking/Kayak."].filter(Boolean).join("\n");};
-  const go=async()=>{if(!legs[0].to||!legs[0].depDate){setErr("Destination et date requises.");return;}if(from==="OTHER"&&!fromCustom.trim()){setErr("Code IATA requis.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");}catch(e){setErr(e.message);setPhase("error");}};
-  const reset=()=>{setPhase("idle");setResult("");setErr("");setShowRaw(false);};
+  const go=async()=>{if(!legs[0].to||!legs[0].depDate){setErr("Destination et date requises.");return;}if(from==="OTHER"&&!fromCustom.trim()){setErr("Code IATA requis.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
+  const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
 
   return(
-    <div style={{maxWidth:900,margin:"0 auto",padding:mob?"1rem":"2rem 1.5rem",background:t.bg,minHeight:"100vh",fontFamily:FN,transition:"background 0.3s"}}>
+    <div style={{maxWidth:900,margin:"0 auto",padding:"1rem 1rem",background:t.bg,minHeight:"100vh",fontFamily:FN,transition:"background 0.3s"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
-      <div style={{position:"fixed",top:16,right:16,zIndex:1001}}><button onClick={()=>setIsDark(!isDark)} style={{width:40,height:40,borderRadius:"50%",border:`1px solid ${t.border}`,background:t.card,color:t.gold,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.2)",fontSize:16}}>{isDark?"☀️":"🌙"}</button></div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}><div><div style={{fontSize:mob?28:36,fontWeight:900,letterSpacing:"-0.04em",color:t.text,lineHeight:1}}>WDC</div><div style={{fontSize:11,fontWeight:700,letterSpacing:"0.18em",color:t.gold,marginTop:1}}>AI TRAVEL</div></div>{!mob&&<div style={{fontSize:10,color:t.muted,textAlign:"right",lineHeight:1.9}}><div>GVA · ZRH · MXP</div></div>}</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+        <div style={{textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,letterSpacing:"-0.04em",color:t.text,lineHeight:1}}>WDC</div><div style={{fontSize:11,fontWeight:700,letterSpacing:"0.18em",color:t.gold,marginTop:3}}>AI TRAVEL</div></div>
+        <button onClick={()=>setIsDark(!isDark)} style={{width:40,height:40,borderRadius:"50%",border:`1px solid ${t.border}`,background:t.card,color:t.gold,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.2)",fontSize:16,flexShrink:0}}>{isDark?"☀️":"🌙"}</button>
+      </div>
 
-      {phase!=="done"&&<>
-        <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>{[{id:"trips",label:"🗺 Trips"},{id:"vols",label:"✈️ Vols"},{id:"hotels",label:"🏨 Hébergements"}].map(tab=><button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:"9px 18px",borderRadius:20,border:`1px solid ${activeTab===tab.id?t.gold:t.border}`,background:activeTab===tab.id?t.gold:"transparent",color:activeTab===tab.id?"#0a0a0a":t.muted,fontSize:12,fontWeight:activeTab===tab.id?700:500,cursor:"pointer",fontFamily:FN}}>{tab.label}</button>)}</div>
-        <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:mob?"14px":"18px 22px",marginBottom:10}}><Lbl t={t}>Programmes de fidélité</Lbl><LoyaltySelector selected={loyaltyCards} onChange={setLoyaltyCards} points={loyaltyPoints} onPoints={setLoyaltyPoints} t={t}/></div>
+      {/* Form - always visible, collapsed accordion when results shown */}
+      {phase==="done"&&result&&<button onClick={()=>setFormOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:t.card,border:`1px solid ${t.border}`,borderRadius:formOpen?"14px 14px 0 0":14,cursor:"pointer",marginBottom:formOpen?0:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:14}}>🔍</span><span style={{fontSize:13,fontWeight:600,color:t.text,fontFamily:FN}}>Modifier la recherche</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>{!formOpen&&<span style={{fontSize:11,color:t.muted,fontFamily:FN,maxWidth:250,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{legs.filter(l=>l.to).map((l,i)=>i===0?`${from==="OTHER"?fromCustom:from} → ${l.to}`:l.to).join(" → ")}</span>}<span style={{color:t.muted,fontSize:16}}>{formOpen?"−":"+"}</span></div>
+      </button>}
+      {(formOpen||phase!=="done")&&<div style={{background:phase==="done"?t.card:"transparent",border:phase==="done"?`1px solid ${t.border}`:"none",borderTop:phase==="done"?"none":undefined,borderRadius:phase==="done"?"0 0 14px 14px":0,padding:phase==="done"?"10px 0 0":0,marginBottom:10,overflow:"hidden"}}>
+        <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",padding:phase==="done"?"0 20px":"0"}}>{[{id:"trips",label:"🗺 Trips"},{id:"vols",label:"✈️ Vols"},{id:"hotels",label:"🏨 Hébergements"}].map(tab=><button key={tab.id} onClick={()=>setActiveTab(tab.id)} style={{padding:"9px 18px",borderRadius:20,border:`1px solid ${activeTab===tab.id?t.gold:t.border}`,background:activeTab===tab.id?t.gold:"transparent",color:activeTab===tab.id?"#0a0a0a":t.muted,fontSize:12,fontWeight:activeTab===tab.id?700:500,cursor:"pointer",fontFamily:FN}}>{tab.label}</button>)}</div>
+        <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:14,padding:"14px 20px",marginBottom:10}}><Lbl t={t}>Programmes de fidélité</Lbl><LoyaltySelector selected={loyaltyCards} onChange={setLoyaltyCards} points={loyaltyPoints} onPoints={setLoyaltyPoints} t={t}/></div>
         <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:16,overflow:"hidden",marginBottom:10}}>
-          <div style={{padding:mob?"14px":"20px 24px",borderBottom:`1px solid ${t.border}`,display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1.5fr",gap:16}}><div><Lbl t={t}>Voyageurs</Lbl><select value={travelers} onChange={e=>setTravelers(e.target.value)} style={INP}>{[1,2,3,4,5,6,8,10].map(n=><option key={n} value={n}>{n} pers.</option>)}</select></div><div><Lbl t={t}>Bagages</Lbl><select value={baggage} onChange={e=>setBaggage(e.target.value)} style={INP}>{BAGGAGE_OPTIONS.map(b=><option key={b.id} value={b.id}>{b.label}</option>)}</select></div></div>
-          <div style={{padding:mob?"14px":"20px 24px 8px"}}>
-            {mob?legs.map((leg,idx)=><div key={idx} style={{marginBottom:16,padding:16,background:t.card2,borderRadius:12,border:`1px solid ${t.border}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:t.gold}}>ÉTAPE {idx+1}</span>{idx>0&&<button onClick={()=>removeLeg(idx)} style={{width:28,height:28,border:`1px solid ${t.border}`,background:"transparent",cursor:"pointer",color:t.muted,fontSize:16,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}</div><div style={{marginBottom:8}}><Lbl t={t}>Depuis</Lbl>{idx===0?<select value={from} onChange={e=>setFrom(e.target.value)} style={INP}>{AIRPORTS.map(a=><option key={a.code} value={a.code}>{a.code==="OTHER"?"Autre":`${a.code} - ${a.name}`}</option>)}</select>:<div style={INP_RO}>{legs[idx-1].to||"-"}</div>}</div><div style={{marginBottom:8}}><Lbl t={t}>Vers</Lbl><input value={leg.to} onChange={e=>updateLeg(idx,"to",e.target.value)} placeholder="Destination" style={INP}/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><Lbl t={t}>Aller</Lbl><DateFlexCell value={leg.depDate} onChange={v=>updateLeg(idx,"depDate",v)} flex={leg.depFlex||0} onFlexChange={v=>updateLeg(idx,"depFlex",v)} t={t}/></div><div><Lbl t={t}>Retour</Lbl><DateFlexCell value={leg.retDate} onChange={v=>updateLeg(idx,"retDate",v)} flex={leg.retFlex||0} onFlexChange={v=>updateLeg(idx,"retFlex",v)} t={t}/></div></div></div>)
-            :<>{/* Desktop grid */}
-              <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.2fr) 20px minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 36px",gap:8,marginBottom:8}}><Lbl t={t}>Depuis</Lbl><div/><Lbl t={t}>Vers</Lbl><Lbl t={t}>Date aller</Lbl><Lbl t={t}>Date retour</Lbl><div/></div>
-              {legs.map((leg,idx)=><div key={idx} style={{display:"grid",gridTemplateColumns:"minmax(0,1.2fr) 20px minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 36px",gap:8,alignItems:"flex-start",marginBottom:8}}>{idx===0?<select value={from} onChange={e=>setFrom(e.target.value)} style={INP}>{AIRPORTS.map(a=><option key={a.code} value={a.code}>{a.code==="OTHER"?"✏ Autre":`${a.code} - ${a.name}`}</option>)}</select>:<div style={{...INP_RO,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{legs[idx-1].to||"-"}</div>}<div style={{textAlign:"center",color:t.gold,fontWeight:900,fontSize:16,paddingTop:13}}>→</div><input value={leg.to} onChange={e=>updateLeg(idx,"to",e.target.value)} placeholder={["Marbella","Chicago","Costa Rica"][idx]||"Destination"} style={INP}/><DateFlexCell value={leg.depDate} onChange={v=>updateLeg(idx,"depDate",v)} flex={leg.depFlex||0} onFlexChange={v=>updateLeg(idx,"depFlex",v)} t={t}/><DateFlexCell value={leg.retDate} onChange={v=>updateLeg(idx,"retDate",v)} flex={leg.retFlex||0} onFlexChange={v=>updateLeg(idx,"retFlex",v)} t={t}/>{idx>0?<button onClick={()=>removeLeg(idx)} style={{width:36,height:36,border:`1px solid ${t.border}`,background:"transparent",cursor:"pointer",color:t.muted,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8}}>×</button>:<div/>}</div>)}
-            </>}
+          <div style={{padding:"14px 20px",borderBottom:`1px solid ${t.border}`,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><Lbl t={t}>Voyageurs</Lbl><select value={travelers} onChange={e=>setTravelers(e.target.value)} style={INP}>{[1,2,3,4,5,6,8,10].map(n=><option key={n} value={n}>{n} pers.</option>)}</select></div><div><Lbl t={t}>Bagages</Lbl><select value={baggage} onChange={e=>setBaggage(e.target.value)} style={INP}>{BAGGAGE_OPTIONS.map(b=><option key={b.id} value={b.id}>{b.label}</option>)}</select></div></div>
+          <div style={{padding:"14px 20px 8px"}}>
+            {legs.map((leg,idx)=><div key={idx} style={{marginBottom:12,padding:16,background:t.card2,borderRadius:12,border:`1px solid ${t.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:t.gold,fontFamily:FN}}>ÉTAPE {idx+1}</span>{idx>0&&<button onClick={()=>removeLeg(idx)} style={{width:28,height:28,border:`1px solid ${t.border}`,background:"transparent",cursor:"pointer",color:t.muted,fontSize:16,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 20px 1fr",gap:8,alignItems:"end",marginBottom:10}}>
+                <div><Lbl t={t}>Depuis</Lbl>{idx===0?<select value={from} onChange={e=>setFrom(e.target.value)} style={INP}>{AIRPORTS.map(a=><option key={a.code} value={a.code}>{a.code==="OTHER"?"Autre":`${a.code} - ${a.name}`}</option>)}</select>:<div style={INP_RO}>{legs[idx-1].to||"-"}</div>}</div>
+                <div style={{textAlign:"center",color:t.gold,fontWeight:900,fontSize:16,paddingBottom:14}}>→</div>
+                <div><Lbl t={t}>Vers</Lbl><input value={leg.to} onChange={e=>updateLeg(idx,"to",e.target.value)} placeholder={["Marbella","Chicago","Costa Rica"][idx]||"Destination"} style={INP}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><Lbl t={t}>Date aller</Lbl><DateFlexCell value={leg.depDate} onChange={v=>updateLeg(idx,"depDate",v)} flex={leg.depFlex||0} onFlexChange={v=>updateLeg(idx,"depFlex",v)} t={t}/></div>
+                <div><Lbl t={t}>Date retour</Lbl><DateFlexCell value={leg.retDate} onChange={v=>updateLeg(idx,"retDate",v)} flex={leg.retFlex||0} onFlexChange={v=>updateLeg(idx,"retFlex",v)} t={t}/></div>
+              </div>
+            </div>)}
             {legs.length<5&&<button onClick={addLeg} style={{fontSize:11,padding:"7px 16px",border:`1px dashed ${t.border}`,background:"transparent",cursor:"pointer",color:t.muted,borderRadius:8,marginTop:4,marginBottom:8,fontFamily:FN}}>+ Étape ({legs.length}/5)</button>}
           </div>
           <div style={{borderTop:`1px solid ${t.border}`}}/>
-          <div style={{padding:mob?"14px":"20px 24px 14px"}}><Lbl t={t}>Ambiance</Lbl><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VIBES.map(v=><ChipBtn key={v.id} label={v.label} selected={vibes.includes(v.id)} onClick={()=>setVibes(x=>x.includes(v.id)?x.filter(z=>z!==v.id):[...x,v.id])} t={t}/>)}</div></div>
-          <div style={{padding:mob?"0 14px 14px":"0 24px 14px"}}><Lbl t={t}>Activités</Lbl><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{ACTIVITIES.map(a=><ChipBtn key={a.id} label={a.label} selected={activities.includes(a.id)} onClick={()=>setActivities(x=>x.includes(a.id)?x.filter(z=>z!==a.id):[...x,a.id])} t={t}/>)}</div></div>
-          <div style={{padding:mob?"0 14px 14px":"0 24px 20px"}}><Lbl t={t}>Notes</Lbl><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Budget, occasion..." style={{...INP,minHeight:52,resize:"vertical"}}/></div>
-          {err&&<div style={{margin:mob?"0 14px 14px":"0 24px 16px",fontSize:13,color:"#ff7070",background:"rgba(255,100,100,0.1)",borderRadius:8,padding:"10px 14px"}}>⚠ {err}</div>}
-          <div style={{padding:mob?"0 14px 14px":"0 24px 24px"}}><button onClick={go} disabled={phase==="loading"} style={{width:"100%",padding:16,background:phase==="loading"?t.faint:`linear-gradient(135deg,${t.gold},#d4b85c)`,color:phase==="loading"?t.muted:"#0a0a0a",border:"none",borderRadius:12,cursor:phase==="loading"?"not-allowed":"pointer",fontSize:12,fontWeight:800,letterSpacing:"0.18em",fontFamily:FN}}>{phase==="loading"?"RECHERCHE...":"LANCER LA RECHERCHE"}</button></div>
+          <div style={{padding:"14px 20px"}}><Lbl t={t}>Ambiance</Lbl><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VIBES.map(v=><ChipBtn key={v.id} label={v.label} selected={vibes.includes(v.id)} onClick={()=>setVibes(x=>x.includes(v.id)?x.filter(z=>z!==v.id):[...x,v.id])} t={t}/>)}</div></div>
+          <div style={{padding:"0 20px 14px"}}><Lbl t={t}>Activités</Lbl><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{ACTIVITIES.map(a=><ChipBtn key={a.id} label={a.label} selected={activities.includes(a.id)} onClick={()=>setActivities(x=>x.includes(a.id)?x.filter(z=>z!==a.id):[...x,a.id])} t={t}/>)}</div></div>
+          <div style={{padding:"0 20px 16px"}}><Lbl t={t}>Notes</Lbl><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Budget, occasion..." style={{...INP,minHeight:52,resize:"vertical"}}/></div>
+          {err&&<div style={{margin:"0 20px 14px",fontSize:13,color:"#ff7070",background:"rgba(255,100,100,0.1)",borderRadius:8,padding:"10px 14px"}}>⚠ {err}</div>}
+          <div style={{padding:"0 20px 20px"}}><button onClick={go} disabled={phase==="loading"} style={{width:"100%",padding:16,background:phase==="loading"?t.faint:`linear-gradient(135deg,${t.gold},#d4b85c)`,color:phase==="loading"?t.muted:"#0a0a0a",border:"none",borderRadius:12,cursor:phase==="loading"?"not-allowed":"pointer",fontSize:12,fontWeight:800,letterSpacing:"0.18em",fontFamily:FN}}>{phase==="loading"?"RECHERCHE...":"LANCER LA RECHERCHE"}</button></div>
         </div>
-      </>}
+      </div>}
 
       {phase==="loading"&&<div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:16,padding:"3rem",textAlign:"center",marginTop:10}}><div style={{fontSize:44,marginBottom:"1rem"}}>✈️</div><div style={{fontSize:11,fontWeight:800,letterSpacing:"0.14em",color:t.text,fontFamily:FN}}>{TIPS[tipIdx].toUpperCase()}</div><div style={{display:"flex",justifyContent:"center",gap:6,marginTop:"1.5rem"}}>{TIPS.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:i===tipIdx?t.gold:t.border}}/>)}</div></div>}
 
       {phase==="done"&&result&&<div style={{marginTop:16}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
           <div><span style={{fontSize:11,fontWeight:800,letterSpacing:"0.14em",color:t.text,fontFamily:FN}}>RÉSULTATS</span><span style={{fontSize:10,color:t.muted,marginLeft:12}}>{new Date().toLocaleDateString("fr-CH",{day:"numeric",month:"long",year:"numeric"})}</span></div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button onClick={()=>setShowRaw(!showRaw)} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:"transparent",border:`1px solid ${showRaw?t.gold:t.border}`,borderRadius:6,cursor:"pointer",color:showRaw?t.gold:t.muted}}>📋 BRUT</button><button onClick={()=>navigator.clipboard?.writeText(result)} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:"transparent",border:`1px solid ${t.border}`,borderRadius:6,cursor:"pointer",color:t.muted}}>COPIER</button><button onClick={reset} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:t.gold,border:"none",borderRadius:6,cursor:"pointer",color:"#0a0a0a"}}>NOUVELLE RECHERCHE</button></div>
+          <button onClick={reset} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:t.gold,border:"none",borderRadius:6,cursor:"pointer",color:"#0a0a0a",fontFamily:FN}}>NOUVELLE RECHERCHE</button>
         </div>
-        {showRaw&&<div style={{marginBottom:16,background:t.card,border:`1px solid ${t.border}`,borderRadius:12,padding:16}}><textarea readOnly value={result} style={{width:"100%",minHeight:300,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:12,fontFamily:MN,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
         <ResultsView text={result} t={t} mob={mob}/>
       </div>}
 
