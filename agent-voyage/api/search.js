@@ -21,9 +21,39 @@ CRITÈRES HÉBERGEMENT NON-NÉGOCIABLES (éliminer toute option qui ne les respe
 ✅ Minimum 4 étoiles
 Types acceptés : hôtels, appartements entiers Airbnb, boutique hôtels, resorts
 
-SOURCES À CONSULTER (toujours vérifier les prix en temps réel — ne jamais inventer) :
-Vols : Kayak · Google Flights · Skyscanner · Expedia · Momondo · Opodo · sites directs compagnies
-Hébergements : Booking.com · Airbnb · Expedia Hotels · Hotels.com · TripAdvisor · VRBO · sites directs · Marriott Bonvoy
+SOURCES VOLS À CONSULTER (vérifier prix réels — ne jamais inventer) :
+
+Comparateurs généralistes (priorité) :
+Kayak · Google Flights · Skyscanner · Momondo · Kiwi.com · Jetcost · Liligo · Cheapflights · Opodo · Expedia · Dohop · Jetradar · Hopper · CheapOair · Priceline · FareCompare · Azair (budget Europe)
+
+Alertes et deals vols :
+Going (ex-Scott Cheap Flights) · Dollar Flight Club · Secret Flying · Airfarewatchdog · Travelzoo · FareDeals
+
+Business et First Class spécialisés :
+BusinessClass.com · FlyLine · CheapBusiness.com · JustFly · Fly Business Class
+
+Award flights (miles et points) :
+Seats.aero · Point.me · AwardHacker · ExpertFlyer
+
+Compagnies directes (comparer systématiquement — souvent moins cher en direct) :
+Swiss (swiss.com) · Air France · Lufthansa · British Airways · Emirates · Etihad · Qatar Airways · Singapore Airlines · KLM · Turkish Airlines · Iberia · Delta · United · American Airlines · Ryanair · easyJet · Vueling · Wizz Air · Transavia · Norwegian · Volotea · Jet2
+
+SOURCES HEBERGEMENTS À CONSULTER (vérifier prix réels — ne jamais inventer) :
+
+Comparateurs généralistes (priorité) :
+Booking.com · Hotels.com · Expedia · Trivago · TripAdvisor · HotelsCombined · Kayak Hotels · Agoda · Priceline · Hotelopia
+
+Luxe et boutique spécialisés (pour destinations premium) :
+Mr and Mrs Smith · Tablet Hotels · i-escape · Small Luxury Hotels of the World · Design Hotels · Relais et Chateaux · Preferred Hotels · Leading Hotels of the World · Virtuoso
+
+Programmes fidelite (booking direct souvent meilleur tarif) :
+Marriott Bonvoy (W Hotels, St. Regis, Westin, Sheraton) · Hilton Honors (Conrad, Waldorf Astoria) · World of Hyatt (Park Hyatt, Grand Hyatt) · IHG (InterContinental, Kimpton) · Accor ALL (Sofitel, Raffles) · Radisson Rewards
+
+Locations et appartements :
+Airbnb · VRBO · HomeToGo · Plum Guide (luxe curated) · OneFineStay · Abritel
+
+Derniere minute et flash sales :
+HotelTonight · Secret Escapes · Voyage Prive · Jetsetter · Travelzoo
 
 ---
 
