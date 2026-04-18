@@ -81,7 +81,7 @@ function FlightDisplay({lines,t}){
 
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.l}</button>)}</div>
-    {vols.map((vol,vi)=>{
+    {vols.filter(v=>v.rows.length>0).map((vol,vi)=>{
       const filtered=vol.rows.filter(r=>match(r[0]||"",cls));
       if(!filtered.length)return<div key={vi} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:20,marginBottom:12,textAlign:"center"}}>{vol.title&&<div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>{vol.title}</div>}<div style={{color:t.muted,fontSize:13}}>Pas de vol dans cette classe</div></div>;
       return(<div key={vi} style={{marginBottom:16}}>
@@ -123,7 +123,7 @@ function FlightDisplay({lines,t}){
 // HOTELS — ### City (dates) → #### Hotel → IMAGES: → KV table
 // ═══════════════════════════════════════════════════════════════
 function HotelCard({name,lines,t}){
-  const[open,setOpen]=useState(true);const[imgErr,setImgErr]=useState(false);
+  const[open,setOpen]=useState(true);
   // Extract IMAGES: line
   let imgs=[];for(const l of lines){const m=l.match(/^IMAGES:\s*(.+)/i);if(m){imgs=m[1].split("|").map(u=>u.trim()).filter(u=>u.startsWith("http"));break;}}
   // KV data
@@ -162,13 +162,18 @@ function HotelCard({name,lines,t}){
   if(chips.length<6)chips.push("Lit double");
   if(chips.length<6)chips.push("Salle de bain privée");
   const rN=parseFloat(noteNum||"0");const rC=rN>=9?"#16a34a":rN>=8?"#1d8348":"#2e7d32";
-  const heroImg=imgs[0]||`https://source.unsplash.com/800x400/?luxury+hotel+${encodeURIComponent(name.split(/[,(]/)[0].trim())}`;
+  // Image: try API url first, then picsum.photos (always works)
+  const seed=encodeURIComponent(name.replace(/[^\w]/g,"").substring(0,20));
+  const fallbackImg=`https://picsum.photos/seed/${seed}/800/400`;
+  const[imgSrc,setImgSrc]=useState(imgs[0]||fallbackImg);
+  const[imgFail,setImgFail]=useState(0);
+  const onImgErr=()=>{if(imgFail===0&&imgs[0]){setImgSrc(fallbackImg);setImgFail(1);}else{setImgFail(2);}};
 
   return(<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:14,marginBottom:14,overflow:"hidden"}}>
     <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{stars>0&&<span style={{color:t.gold,fontSize:12}}>{"★".repeat(stars)}</span>}<span style={{fontSize:15,fontWeight:700,color:t.text}}>{name}</span></div><span style={{color:t.muted,fontSize:16}}>{open?"−":"+"}</span></button>
     {open&&<>
       <div style={{height:200,overflow:"hidden",position:"relative"}}>
-        {!imgErr?<img src={heroImg} alt={name} referrerPolicy="no-referrer" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+        {imgFail<2?<img src={imgSrc} alt={name} onError={onImgErr} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c,#0f3460)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div>Photos sur le site officiel</div></div>}
         {imgs.length>1&&<div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff"}}>{imgs.length} photos</div>}
       </div>
@@ -211,10 +216,47 @@ function TotauxDisplay({lines,t}){
   if(!data.length)return null;const active=data[idx]||data[0];
   const totalVal=parseInt(String(active[active.length-1]||"0").replace(/['\sCHFchf]/g,""))||0;
   const actEst=Math.round(totalVal*0.12/100)*100;
+  // Parse individual cost columns (skip scenario name and total)
+  const costs=[];
+  if(header)for(let i=1;i<header.length-1;i++){const val=active[i]||"";if(val){const num=parseInt(String(val).replace(/[^\d]/g,""))||0;const detail=val.match(/\(([^)]+)\)/)?.[1]||"";costs.push({label:header[i],value:num,detail,raw:val});}}
+
   return(<div>
-    <div style={{display:"grid",gridTemplateColumns:`repeat(${data.length},1fr)`,borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{data.map((r,i)=>{const on=i===idx;const total=r[r.length-1]||"";return<button key={i} onClick={()=>setIdx(i)} style={{padding:"14px 8px",textAlign:"center",background:on?t.goldBg2:t.card2,color:on?t.gold:t.muted,border:"none",borderBottom:on?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN}}><div style={{fontSize:10,fontWeight:700,lineHeight:1.4}}>{(r[0]||"").replace(/💺|🔀|🪑/g,"").substring(0,30)}</div><div style={{fontSize:20,fontWeight:900,marginTop:4,fontFamily:MO}}>{fmt(total)}</div><div style={{fontSize:10,marginTop:2}}>CHF</div></button>})}</div>
-    <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,overflow:"hidden"}}>{header&&header.slice(1).map((h,i)=>{const val=active[i+1]||"";if(!val)return null;const isLast=i===header.length-2;return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderBottom:isLast?"none":`1px solid ${t.border}`,background:isLast?t.goldBg:"transparent"}}><span style={{fontSize:13,fontWeight:isLast?700:400,color:isLast?t.gold:t.text}}>{h}</span><span style={{fontSize:isLast?20:14,fontWeight:isLast?900:600,color:isLast?t.gold:t.text,fontFamily:MO}}>{fmt(val)} CHF</span></div>;})}
-    {actEst>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"14px 20px",borderTop:`1px solid ${t.border}`,background:t.goldBg}}><div><div style={{fontSize:13,fontWeight:600,color:t.text}}>Activités estimées</div><div style={{fontSize:10,color:t.muted,marginTop:2}}>Restos, excursions, transports</div></div><span style={{fontSize:14,fontWeight:700,color:t.muted,fontFamily:MO}}>~{fmt(actEst)} CHF</span></div>}
+    {/* === SCENARIO TABS === */}
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${data.length},1fr)`,gap:0,marginBottom:24}}>
+      {data.map((r,i)=>{const on=i===idx;const total=r[r.length-1]||"";const name=(r[0]||"").replace(/💺|🔀|🪑/g,"").trim();
+      return<button key={i} onClick={()=>setIdx(i)} style={{padding:"20px 12px",textAlign:"center",background:on?t.card2:t.card,border:`1px solid ${on?t.gold:t.border}`,borderRadius:i===0?"14px 0 0 14px":i===data.length-1?"0 14px 14px 0":"0",cursor:"pointer",position:"relative",borderLeft:i>0?"none":undefined}}>
+        {on&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:t.gold,borderRadius:i===0?"14px 0 0 0":i===data.length-1?"0 14px 0 0":"0"}}/>}
+        <div style={{fontSize:10,fontWeight:600,color:on?t.gold:t.muted,letterSpacing:"0.06em",lineHeight:1.4,marginBottom:8}}>{name.toUpperCase()}</div>
+        <div style={{fontSize:26,fontWeight:900,color:on?t.gold:t.muted,fontFamily:MO}}>{fmt(total)}</div>
+        <div style={{fontSize:10,color:on?t.gold:t.muted,marginTop:2}}>CHF total</div>
+      </button>})}
+    </div>
+
+    {/* === BREAKDOWN CARD === */}
+    <div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:14,overflow:"hidden"}}>
+      {costs.map((c,i)=>{
+        const pct=totalVal>0?Math.round(c.value/totalVal*100):0;
+        const barColor=i===0?t.gold:i===1?t.blue:"#9b59b6";
+        return<div key={i} style={{padding:"18px 22px",borderBottom:`1px solid ${t.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+            <div><div style={{fontSize:13,fontWeight:600,color:t.text}}>{c.label.replace(/CHF/gi,"").trim()}</div>{c.detail&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>{c.detail}</div>}</div>
+            <div style={{textAlign:"right"}}><span style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{fmt(c.value)}</span><span style={{fontSize:12,color:t.muted,marginLeft:4}}>CHF</span></div>
+          </div>
+          <div style={{height:4,background:t.border,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:barColor,borderRadius:2}}/></div>
+        </div>;
+      })}
+
+      {/* TOTAL */}
+      <div style={{padding:"20px 22px",background:t.goldBg,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${t.border}`}}>
+        <div style={{fontSize:14,fontWeight:800,color:t.gold,letterSpacing:"0.04em"}}>TOTAL</div>
+        <div><span style={{fontSize:28,fontWeight:900,color:t.gold,fontFamily:MO}}>{fmt(totalVal)}</span><span style={{fontSize:14,color:t.gold,marginLeft:6}}>CHF</span></div>
+      </div>
+
+      {/* ACTIVITIES ESTIMATE */}
+      {actEst>0&&<div style={{padding:"16px 22px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div><div style={{fontSize:13,fontWeight:500,color:t.muted}}>Budget activités estimé</div><div style={{fontSize:10,color:t.faint,marginTop:2}}>Restaurants, excursions, transports locaux (~12%)</div></div>
+        <div><span style={{fontSize:15,fontWeight:700,color:t.muted,fontFamily:MO}}>~{fmt(actEst)}</span><span style={{fontSize:11,color:t.muted,marginLeft:4}}>CHF</span></div>
+      </div>}
     </div>
   </div>);
 }
