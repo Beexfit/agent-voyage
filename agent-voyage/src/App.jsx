@@ -296,7 +296,7 @@ function DateFlexCell({value,onChange,flex,onFlexChange,t}){const S={width:"100%
 // ═══════════════════════════════════════════════════════════════
 export default function App(){
   const w=useW();const mob=w<700;
-  const[isDark,setIsDark]=useState(true);const t=isDark?DARK:LIGHT;
+  const[isDark,setIsDark]=useState(true);const[showRaw,setShowRaw]=useState(false);const t=isDark?DARK:LIGHT;
   useEffect(()=>{document.body.style.background=t.bg;document.body.style.margin="0";document.documentElement.style.background=t.bg;},[t.bg]);
   const[activeTab,setActiveTab]=useState("trips");const[formOpen,setFormOpen]=useState(true);
   const[loyaltyCards,setLoyaltyCards]=useState([]);const[loyaltyPoints,setLoyaltyPoints]=useState(0);
@@ -315,7 +315,7 @@ export default function App(){
 
   const buildPrompt=()=>{const airport=from==="OTHER"?fromCustom.toUpperCase():from;const vibeLabels=VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ");const actLabels=ACTIVITIES.filter(a=>activities.includes(a.id)).map(a=>a.label).join(", ");const legLines=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?airport:(legs[i-1].to||airport);const parts=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.depDate)parts.push(`départ ${l.depDate}${l.depFlex>0?` (flexible ±${l.depFlex} jours)`:""}`);if(l.retDate)parts.push(i===legs.length-1?`retour ${l.retDate}${l.retFlex>0?` (flexible ±${l.retFlex} jours)`:""}`:`arrivée ${l.retDate}${l.retFlex>0?` (flexible ±${l.retFlex} jours)`:""}`);return"✈️ "+parts.join(" - ");});const bagLabel=BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label||"";const loyaltyInfo=loyaltyCards.length>0?`🎫 Programmes : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")} - ${loyaltyPoints>=100000?">100k":loyaltyPoints.toLocaleString("fr-CH")} pts`:"";return["Planifie ce voyage, recherche tous les prix en temps réel :",`Aéroport de base : ${airport}`,...legLines,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${bagLabel}`:"",loyaltyInfo,vibeLabels?`Ambiance : ${vibeLabels}`:"",actLabels?`Activités : ${actLabels}`:"",notes?`Notes : ${notes}`:"","","FORMAT OBLIGATOIRE : Pour chaque vol, inclure heure de départ et heure d'arrivée dans le tableau. Pour la météo multi-destination, utiliser ### Ville (Mois) comme sous-titres. Pour les hébergements multi-destination, utiliser ### Ville (dates) puis #### Nom Hôtel. Tableau complet par vol avec 3 scénarios, totaux CHF, liens Booking/Kayak."].filter(Boolean).join("\n");};
   const go=async()=>{if(!legs[0].to||!legs[0].depDate){setErr("Destination et date requises.");return;}if(from==="OTHER"&&!fromCustom.trim()){setErr("Code IATA requis.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
-  const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
+  const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);setShowRaw(false);};
 
   return(
     <div style={{maxWidth:900,margin:"0 auto",padding:"1rem 1rem",background:t.bg,minHeight:"100vh",fontFamily:FN,transition:"background 0.3s"}}>
@@ -364,7 +364,9 @@ export default function App(){
       {phase==="done"&&result&&<div style={{marginTop:16}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
           <div><span style={{fontSize:11,fontWeight:800,letterSpacing:"0.14em",color:t.text,fontFamily:FN}}>RÉSULTATS</span><span style={{fontSize:10,color:t.muted,marginLeft:12}}>{new Date().toLocaleDateString("fr-CH",{day:"numeric",month:"long",year:"numeric"})}</span></div>
-          <button onClick={reset} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:t.gold,border:"none",borderRadius:6,cursor:"pointer",color:"#0a0a0a",fontFamily:FN}}>NOUVELLE RECHERCHE</button>
+          <div style={{display:"flex",gap:8}}><button onClick={()=>setShowRaw(!showRaw)} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:"transparent",border:`1px solid ${showRaw?t.gold:t.border}`,borderRadius:6,cursor:"pointer",color:showRaw?t.gold:t.muted,fontFamily:FN}}>📋 BRUT</button><button onClick={reset} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:t.gold,border:"none",borderRadius:6,cursor:"pointer",color:"#0a0a0a",fontFamily:FN}}>NOUVELLE RECHERCHE</button></div>
+        </div>
+        {showRaw&&<div style={{marginBottom:16,background:t.card,border:`1px solid ${t.border}`,borderRadius:12,padding:16}}><div style={{fontSize:11,fontWeight:700,color:t.gold,marginBottom:8,fontFamily:FN}}>Copie tout et envoie-le sur Claude</div><textarea readOnly value={result} style={{width:"100%",minHeight:300,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:12,fontFamily:MN,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
         </div>
         <ResultsView text={result} t={t} mob={mob}/>
       </div>}
