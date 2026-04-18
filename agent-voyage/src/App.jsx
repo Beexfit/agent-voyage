@@ -861,6 +861,47 @@ function ResultsView({text}) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// DATE FLEX CELL — date input + exact/±jours toggle + slider
+// ═══════════════════════════════════════════════════════════════════
+
+function DateFlexCell({value, onChange, flex, onFlexChange}) {
+  return (
+    <div>
+      <input type="date" value={value} onChange={e=>onChange(e.target.value)} style={INP}/>
+      <div style={{display:"flex",alignItems:"center",marginTop:"5px",gap:"5px"}}>
+        <button onClick={()=>onFlexChange(0)} style={{
+          fontSize:"9px",fontWeight:"700",padding:"3px 7px",
+          borderRadius:"10px",border:`1px solid ${flex===0?C.gold:C.border}`,
+          background:flex===0?"rgba(201,169,110,0.15)":"transparent",
+          color:flex===0?C.gold:C.muted,cursor:"pointer",letterSpacing:"0.05em",whiteSpace:"nowrap",
+        }}>EXACT</button>
+        <button onClick={()=>onFlexChange(flex===0?3:flex)} style={{
+          fontSize:"9px",fontWeight:"700",padding:"3px 7px",
+          borderRadius:"10px",border:`1px solid ${flex>0?C.gold:C.border}`,
+          background:flex>0?"rgba(201,169,110,0.15)":"transparent",
+          color:flex>0?C.gold:C.muted,cursor:"pointer",letterSpacing:"0.05em",whiteSpace:"nowrap",
+        }}>{flex>0?`± ${flex}j`:"± JOURS"}</button>
+      </div>
+      {flex>0&&(
+        <div style={{marginTop:"7px",padding:"10px 12px",background:C.card2,borderRadius:"8px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
+            <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.06em"}}>FLEXIBILITÉ</span>
+            <span style={{fontSize:"12px",fontWeight:"800",color:C.gold}}>± {flex} jour{flex>1?"s":""}</span>
+          </div>
+          <input type="range" min="1" max="21" step="1" value={flex}
+            onChange={e=>onFlexChange(+e.target.value)}
+            style={{width:"100%",accentColor:C.gold,cursor:"pointer"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",color:C.muted,marginTop:"4px"}}>
+            <span>± 1j</span><span>± 7j</span><span>± 14j</span><span>± 21j</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════════
@@ -878,7 +919,7 @@ export default function App() {
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [from, setFrom] = useState("GVA");
   const [fromCustom, setFromCustom] = useState("");
-  const [legs, setLegs] = useState([{to:"",depDate:"",retDate:""}]);
+  const [legs, setLegs] = useState([{to:"",depDate:"",retDate:"",depFlex:0,retFlex:0}]);
   const [travelers, setTravelers] = useState("1");
   const [baggage, setBaggage] = useState("no_pref");
   const [vibes, setVibes] = useState([]);
@@ -896,7 +937,7 @@ export default function App() {
     return()=>clearInterval(timer.current);
   },[phase]);
 
-  const addLeg=()=>{if(legs.length<5)setLegs(l=>[...l,{to:"",depDate:l[l.length-1].retDate||"",retDate:""}]);};
+  const addLeg=()=>{if(legs.length<5)setLegs(l=>[...l,{to:"",depDate:l[l.length-1].retDate||"",retDate:"",depFlex:0,retFlex:0}]);};
   const removeLeg=idx=>setLegs(l=>l.filter((_,i)=>i!==idx));
   const updateLeg=(idx,field,val)=>{
     setLegs(l=>{
@@ -915,8 +956,8 @@ export default function App() {
     const legLines=legs.filter(l=>l.to).map((l,i)=>{
       const fp=i===0?airport:(legs[i-1].to||airport);
       const parts=[`Vol ${i+1} : ${fp} -> ${l.to}`];
-      if(l.depDate) parts.push(`départ ${l.depDate}`);
-      if(l.retDate) parts.push(i===legs.length-1?`retour ${l.retDate}`:`arrivée ${l.retDate}`);
+      if(l.depDate) parts.push(`départ ${l.depDate}${l.depFlex>0?` (flexible ±${l.depFlex} jours, chercher le meilleur prix dans cette plage)`:""}`);
+      if(l.retDate) parts.push(i===legs.length-1?`retour ${l.retDate}${l.retFlex>0?` (flexible ±${l.retFlex} jours)`:""}`:`arrivée ${l.retDate}${l.retFlex>0?` (flexible ±${l.retFlex} jours)`:""}`);
       return "✈️ "+parts.join(" - ");
     });
     const bagLabel=BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label||"";
@@ -1002,15 +1043,15 @@ export default function App() {
             <Lbl s={{marginBottom:0}}>Depuis</Lbl><div/><Lbl s={{marginBottom:0}}>Vers</Lbl><Lbl s={{marginBottom:0}}>Date aller</Lbl><Lbl s={{marginBottom:0}}>Date retour</Lbl><div/>
           </div>
           {legs.map((leg,idx)=>(
-            <div key={idx} style={{display:"grid",gridTemplateColumns:"minmax(0,1.2fr) 20px minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 36px",gap:"8px",alignItems:"center",marginBottom:"8px"}}>
+            <div key={idx} style={{display:"grid",gridTemplateColumns:"minmax(0,1.2fr) 20px minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 36px",gap:"8px",alignItems:"flex-start",marginBottom:"8px"}}>
               {idx===0
                 ?<select value={from} onChange={e=>setFrom(e.target.value)} style={INP}>{AIRPORTS.map(a=><option key={a.code} value={a.code}>{a.code==="OTHER"?"✏ Autre":`${a.code} - ${a.name}`}</option>)}</select>
                 :<div style={{...INP_RO,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{legs[idx-1].to||"-"}</div>
               }
-              <div style={{textAlign:"center",color:C.gold,fontWeight:"900",fontSize:"16px"}}>→</div>
+              <div style={{textAlign:"center",color:C.gold,fontWeight:"900",fontSize:"16px",paddingTop:"13px"}}>→</div>
               <input value={leg.to} onChange={e=>updateLeg(idx,"to",e.target.value)} placeholder={["Marbella, Espagne","Chicago, USA","Costa Rica","Mykonos"][idx]||"Destination"} style={INP}/>
-              <input type="date" value={leg.depDate} onChange={e=>updateLeg(idx,"depDate",e.target.value)} style={INP}/>
-              <input type="date" value={leg.retDate} onChange={e=>updateLeg(idx,"retDate",e.target.value)} style={INP}/>
+              <DateFlexCell value={leg.depDate} onChange={v=>updateLeg(idx,"depDate",v)} flex={leg.depFlex||0} onFlexChange={v=>updateLeg(idx,"depFlex",v)}/>
+              <DateFlexCell value={leg.retDate} onChange={v=>updateLeg(idx,"retDate",v)} flex={leg.retFlex||0} onFlexChange={v=>updateLeg(idx,"retFlex",v)}/>
               {idx>0?<button onClick={()=>removeLeg(idx)} style={{width:"36px",height:"36px",border:`1px solid ${C.border}`,background:"transparent",cursor:"pointer",color:C.muted,fontSize:"18px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px"}}>×</button>:<div/>}
             </div>
           ))}
