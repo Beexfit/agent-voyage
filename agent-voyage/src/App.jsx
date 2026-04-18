@@ -56,6 +56,8 @@ function RecapDisplay({lines,t}){
   }
   // Also check header row for column-based format
   if(!nights&&rows[0]){const hdr=rows[0];for(let i=0;i<hdr.length;i++){if(/dur|nuit/i.test(hdr[i])){for(const r of data){const nm=(r[i]||"").match(/(\d+)/);if(nm)nights+=parseInt(nm[1])||0;}}if(/voyag|pers/i.test(hdr[i])){for(const r of data){const m=(r[i]||"").match(/(\d+)/);if(m)voy=m[1];}}}}
+  // Last resort: search ALL raw lines for "X nuits"
+  if(!nights){for(const l of lines){const m=l.match(/(\d+)\s*nuit/gi);if(m)m.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});}}
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
       <div style={{background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:t.goldD,letterSpacing:"0.08em",marginBottom:8}}>NUITS</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{nights||"–"}</div></div>
@@ -166,10 +168,11 @@ function HotelCard({name,lines,t}){
   if(chips.length<6)chips.push("Lit double");
   if(chips.length<6)chips.push("Salle de bain privée");
   const rN=parseFloat(noteNum||"0");const rC=rN>=9?"#16a34a":rN>=8?"#1d8348":"#2e7d32";
-  // Image: try API url, if fails show clean branded placeholder
-  const[imgSrc,setImgSrc]=useState(imgs[0]||null);
-  const[imgOk,setImgOk]=useState(!!imgs[0]);
-  const onImgErr=()=>{if(imgs.length>1&&imgSrc===imgs[0]){setImgSrc(imgs[1]);}else{setImgOk(false);}};
+  // Image: try ALL API urls in sequence before giving up
+  const[imgIdx,setImgIdx]=useState(0);
+  const imgSrc=imgs[imgIdx]||null;
+  const[imgOk,setImgOk]=useState(imgs.length>0);
+  const onImgErr=()=>{if(imgIdx+1<imgs.length)setImgIdx(i=>i+1);else setImgOk(false);};
 
   return(<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:14,marginBottom:14,overflow:"hidden"}}>
     <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{stars>0&&<span style={{color:t.gold,fontSize:12}}>{"★".repeat(stars)}</span>}<span style={{fontSize:15,fontWeight:700,color:t.text}}>{name}</span></div><span style={{color:t.muted,fontSize:16}}>{open?"−":"+"}</span></button>
@@ -402,7 +405,7 @@ export default function App(){
   const uLeg=(i,f,v)=>{setLegs(l=>{const n=[...l];n[i]={...n[i],[f]:v};if(f==="d2"&&i+1<n.length)n[i+1]={...n[i+1],d1:v};return n;});};
   const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:14,fontFamily:FN,padding:"13px 14px",outline:"none"};
 
-  const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. Pour les hébergements multi-destination: ### Ville (dates) puis #### Nom Hôtel. Pour la météo: ### Ville (Mois). Inclure IMAGES: url1 | url2 pour chaque hôtel. 3 scénarios de vol, totaux CHF."].filter(Boolean).join("\n");};
+  const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules des tableaux. Pour les hébergements: ### Ville (dates) puis #### Nom Hôtel. Pour IMAGES: chercher les VRAIES URLs de photos sur le site officiel de l'hôtel ou Booking.com (cf.bstatic.com) - ne jamais inventer d'URLs. Pour la météo: ### Ville (Mois). 3 scénarios de vol, totaux CHF."].filter(Boolean).join("\n");};
   const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
   const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
 
@@ -461,7 +464,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.6</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.7</div>
       <ChatWidget t={t}/>
     </div>
   );
