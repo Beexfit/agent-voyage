@@ -85,27 +85,47 @@ const INP = {
 const INP_RO = {...INP, color:C.muted, cursor:"default", background:C.card2};
 
 // ═══════════════════════════════════════════════════════════════════
-// UTILITIES
+// UTILITIES — clean() joins orphan commas/periods from API output
 // ═══════════════════════════════════════════════════════════════════
 
-const clean = t => t ? t.replace(/[—–]/g," - ") : "";
+function clean(text) {
+  if (!text) return "";
+  const lines = text.replace(/[—–]/g, " - ").split("\n");
+  const out = [];
+  for (const line of lines) {
+    const t = line.trim();
+    const prev = out.length > 0 ? out[out.length - 1] : null;
+    // Join orphan punctuation lines to the previous line
+    if (prev !== null && !prev.trim().startsWith("|") && !prev.trim().startsWith("#") && (
+      /^[,;]/.test(t) ||
+      /^\.\s/.test(t) ||
+      /^\.$/.test(t) ||
+      (t.length > 0 && t.length <= 4 && !/^[|#\-*✅•\d]/.test(t) && t !== "")
+    )) {
+      out[out.length - 1] = out[out.length - 1].trimEnd() + (t.startsWith(",") || t.startsWith(".") || t.startsWith(";") ? "" : " ") + t;
+    } else {
+      out.push(line);
+    }
+  }
+  return out.join("\n");
+}
 
 function wxEmoji(t) {
-  const s = (t||"").toLowerCase();
-  if(s.includes("orage")||s.includes("storm")) return "⛈️";
-  if(s.includes("pluie")||s.includes("rain")) return "🌧️";
-  if(s.includes("nuageux")||s.includes("couvert")) return "☁️";
-  if(s.includes("partiellement")) return "⛅";
-  if(s.includes("neige")||s.includes("snow")) return "❄️";
-  if(s.includes("vent")||s.includes("wind")) return "💨";
-  if(s.includes("soleil")||s.includes("ensoleillé")||s.includes("beau")||s.includes("sunny")) return "☀️";
+  const s = (t || "").toLowerCase();
+  if (s.includes("orage") || s.includes("storm")) return "⛈️";
+  if (s.includes("pluie") || s.includes("rain")) return "🌧️";
+  if (s.includes("nuageux") || s.includes("couvert")) return "☁️";
+  if (s.includes("partiellement")) return "⛅";
+  if (s.includes("neige") || s.includes("snow")) return "❄️";
+  if (s.includes("vent") || s.includes("wind")) return "💨";
+  if (s.includes("soleil") || s.includes("ensoleillé") || s.includes("beau") || s.includes("sunny")) return "☀️";
   return "🌤️";
 }
 
 function extractImages(lines) {
-  for(const l of lines){
+  for (const l of lines) {
     const m = l.match(/^IMAGES:\s*(.+)/i);
-    if(m) return m[1].split("|").map(u=>u.trim()).filter(u=>u.startsWith("http"));
+    if (m) return m[1].split("|").map(u => u.trim()).filter(u => u.startsWith("http"));
   }
   return [];
 }
@@ -113,195 +133,188 @@ function extractImages(lines) {
 function parseSections(text) {
   const lines = clean(text).split("\n");
   const sections = []; let cur = null;
-  for(const l of lines){
+  for (const l of lines) {
     const h2 = l.match(/^## (.+)/);
-    if(h2){if(cur) sections.push(cur); cur={title:h2[1].trim(),lines:[]};}
-    else if(cur) cur.lines.push(l);
+    if (h2) { if (cur) sections.push(cur); cur = { title: h2[1].trim(), lines: [] }; }
+    else if (cur) cur.lines.push(l);
   }
-  if(cur) sections.push(cur);
+  if (cur) sections.push(cur);
   return sections;
 }
 
 function parseHotelBlocks(lines) {
   const blocks = []; let cur = null;
-  for(const l of lines){
+  for (const l of lines) {
     const h3 = l.match(/^### (.+)/);
-    if(h3){
+    if (h3) {
+      if (cur) blocks.push(cur);
       const name = h3[1].trim();
-      // Skip destination headers like "MARBELLA (6 nuits)" or "HONOLULU (12 nuits)"
-      const isDestHeader = /\(\d+\s*nuits?\)/i.test(name) || /^[A-Z\s\-,]+$/.test(name);
-      if(isDestHeader){
-        if(cur) blocks.push(cur);
-        cur = {name, lines:[], isHeader:true};
-      } else {
-        if(cur) blocks.push(cur);
-        cur = {name, lines:[], isHeader:false};
-      }
-    } else if(cur) cur.lines.push(l);
+      const isHeader = /\(\d+\s*nuits?\)/i.test(name) || /^[A-Z\s\-,]{4,}$/.test(name);
+      cur = { name, lines: [], isHeader };
+    } else if (cur) cur.lines.push(l);
   }
-  if(cur) blocks.push(cur);
+  if (cur) blocks.push(cur);
   return blocks;
 }
 
-// Extract emoji + rest from section title
+// Parse a CRITÈRE|DÉTAIL table into a dict
+function parseTable(lines) {
+  const data = {};
+  for (const l of lines) {
+    if (l.startsWith("|") && !l.match(/^[\|\s:\-]+$/)) {
+      const cells = l.split("|").slice(1, -1).map(c => c.trim());
+      if (cells.length >= 2 && cells[0] && cells[1]) {
+        const key = cells[0].toLowerCase()
+          .replace(/[éèê]/g, "e").replace(/[àâ]/g, "a")
+          .replace(/[îï]/g, "i").replace(/\s+/g, "_").replace(/[^a-z_\/]/g, "");
+        data[key] = cells[1];
+      }
+    }
+  }
+  return data;
+}
+
+// Extract title icon
 function titleParts(t) {
-  const m = t.match(/^((?:[\u{1F300}-\u{1FFFF}][\uFE0F\u200D]*)+)\s*/u);
-  if(m) return {icon:m[1], label:t.slice(m[0].length)};
-  return {icon:"", label:t};
+  const m = t.match(/^([\u{1F300}-\u{1FFFF}][\uFE0F\u200D]*)+\s*/u);
+  if (m) return { icon: m[0].trim(), label: t.slice(m[0].length).trim() };
+  return { icon: "", label: t };
+}
+
+// Inline markdown for prose
+function renderInline(s) {
+  return (s || "")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" target="_blank" rel="noopener" style="color:#c9a96e;text-decoration:none;border-bottom:1px solid #a07840">$1 ↗</a>`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// BASE COMPONENTS
+// PROSE BLOCK — renders clean paragraphs (no table mess)
 // ═══════════════════════════════════════════════════════════════════
 
-function Lbl({children, s={}}) {
-  return <div style={{fontSize:"10px",fontWeight:"600",letterSpacing:"0.1em",color:C.muted,marginBottom:"6px",textTransform:"uppercase",fontFamily:C.sans,...s}}>{children}</div>;
-}
+function ProseBlock({ lines }) {
+  const cleaned = clean(lines.join("\n")).split("\n").filter(l => {
+    const t = l.trim();
+    if (!t || t === "|" || /^\|[\s:\-|]+\|$/.test(t)) return false;
+    if (/^IMAGES:/i.test(t)) return false;
+    if (/^#{1,4}\s/.test(t)) return false;
+    return true;
+  });
 
-function Chip({label, selected, onClick}) {
-  return <button type="button" onClick={onClick} style={{padding:"7px 15px",borderRadius:"20px",border:`1px solid ${selected?C.gold:C.border}`,background:selected?"rgba(201,169,110,0.15)":"transparent",color:selected?C.gold:C.muted,fontSize:"12px",cursor:"pointer",fontFamily:C.sans,whiteSpace:"nowrap"}}>{label}</button>;
-}
+  const out = [];
+  let tbl = [], lst = [], lstOrd = false;
 
-// ═══════════════════════════════════════════════════════════════════
-// LOYALTY SELECTOR
-// ═══════════════════════════════════════════════════════════════════
+  const flushList = () => {
+    if (!lst.length) return;
+    const Tag = lstOrd ? "ol" : "ul";
+    out.push(<Tag key={`l${out.length}`} style={{ margin: "0.4rem 0", paddingLeft: "1.4rem" }}>
+      {lst.map((t, i) => <li key={i} style={{ margin: "0.2rem 0", lineHeight: "1.65", fontSize: "14px", color: C.muted }} dangerouslySetInnerHTML={{ __html: renderInline(t) }} />)}
+    </Tag>);
+    lst = []; lstOrd = false;
+  };
 
-function LoyaltySelector({selected,onChange,points,onPoints}) {
-  return (
-    <div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:"7px",marginBottom:selected.length>0?"14px":"0"}}>
-        {LOYALTY.map(p=>{
-          const on = selected.includes(p.id);
-          return <button key={p.id} onClick={()=>onChange(on?selected.filter(x=>x!==p.id):[...selected,p.id])} style={{padding:"6px 13px",borderRadius:"20px",border:`1px solid ${on?C.gold:C.border}`,background:on?"rgba(201,169,110,0.12)":"transparent",color:on?C.gold:C.muted,fontSize:"11px",cursor:"pointer",fontFamily:C.sans}}>{p.short}</button>;
-        })}
+  const flushTable = () => {
+    if (!tbl.length) return;
+    const rows = tbl.filter(r => !/^\|[\s:\-|]+\|$/.test(r.trim()));
+    if (!rows.length) { tbl = []; return; }
+    const parse = r => r.split("|").slice(1, -1).map(c => c.trim());
+    const [head, ...body] = rows;
+    out.push(
+      <div key={`t${out.length}`} style={{ overflowX: "auto", margin: "1rem 0", borderRadius: "10px", overflow: "hidden", border: `1px solid ${C.border}` }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+          <thead><tr style={{ background: "#1c1c1c" }}>
+            {parse(head).map((h, i) => <th key={i} style={{ padding: "11px 16px", textAlign: "left", fontWeight: "700", color: C.gold, fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", borderBottom: `2px solid ${C.border}` }} dangerouslySetInnerHTML={{ __html: renderInline(h) }} />)}
+          </tr></thead>
+          <tbody>{body.map((r, i) => {
+            const cells = parse(r);
+            return <tr key={i} style={{ background: i % 2 === 0 ? C.card : C.card2, borderBottom: `1px solid ${C.border}` }}>
+              {cells.map((c, j) => <td key={j} style={{ padding: "11px 16px", fontSize: "13px", color: j === 0 ? C.text : C.muted, fontWeight: j === 0 ? "600" : "400" }} dangerouslySetInnerHTML={{ __html: renderInline(c) }} />)}
+            </tr>;
+          })}</tbody>
+        </table>
       </div>
-      {selected.length>0 && (
-        <div style={{background:C.card2,borderRadius:"10px",padding:"14px 16px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-            <Lbl s={{marginBottom:0}}>Points disponibles</Lbl>
-            <span style={{fontSize:"14px",fontWeight:"800",color:C.gold}}>{points>=100000?">100 000":points.toLocaleString("fr-CH")} pts</span>
-          </div>
-          <input type="range" min="0" max="10" step="1"
-            value={Math.max(0,POINTS_MARKS.findIndex(v=>v===points))}
-            onChange={e=>onPoints(POINTS_MARKS[+e.target.value]||0)}
-            style={{width:"100%",accentColor:C.gold,cursor:"pointer"}}/>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",color:C.muted,marginTop:"5px"}}>
-            {["0","5k","10k","20k","30k","50k",">100k"].map(l=><span key={l}>{l}</span>)}
-          </div>
+    );
+    tbl = [];
+  };
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const l = cleaned[i];
+    if (l.startsWith("|")) { flushList(); tbl.push(l); continue; }
+    flushTable();
+    if (/^[-*•] /.test(l)) { lst.push(l.replace(/^[-*•] /, "")); }
+    else if (/^\d+\. /.test(l)) { lstOrd = true; lst.push(l.replace(/^\d+\. /, "")); }
+    else if (/^---+$/.test(l.trim())) { flushList(); out.push(<hr key={i} style={{ border: "none", borderTop: `1px solid ${C.border}`, margin: "1rem 0" }} />); }
+    else if (l.trim() === "") { flushList(); out.push(<div key={i} style={{ height: "0.5rem" }} />); }
+    else {
+      flushList();
+      const isHeader = l.trim().startsWith("**") && l.trim().endsWith("**");
+      out.push(<p key={i} style={{ margin: "0 0 8px", lineHeight: "1.75", fontSize: "14px", color: isHeader ? C.text : C.muted, fontWeight: isHeader ? "600" : "400" }} dangerouslySetInnerHTML={{ __html: renderInline(l) }} />);
+    }
+  }
+  flushList(); flushTable();
+  return <>{out}</>;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ACCORDION CARD
+// ═══════════════════════════════════════════════════════════════════
+
+function AccCard({ title, children, defaultOpen = false, accent = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const { icon, label } = titleParts(title);
+  return (
+    <div style={{ background: C.card, border: `1px solid ${accent ? C.gold : C.border}`, borderRadius: "14px", marginBottom: "8px", overflow: "hidden" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", background: "none", border: "none", cursor: "pointer", borderBottom: open ? `1px solid ${C.border}` : "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {icon && <span style={{ fontSize: "16px" }}>{icon}</span>}
+          <span style={{ fontSize: "13px", fontWeight: "700", color: accent ? C.gold : C.text, letterSpacing: "0.01em" }}>{label}</span>
         </div>
-      )}
+        <span style={{ color: C.muted, fontSize: "20px", fontWeight: "300", lineHeight: 1 }}>{open ? "−" : "+"}</span>
+      </button>
+      {open && <div style={{ padding: "22px" }}>{children}</div>}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// INLINE MARKDOWN (dark D2)
+// PHOTO GRID — Booking.com style
 // ═══════════════════════════════════════════════════════════════════
 
-function MDInline({text, activeClass}) {
-  if(!text) return null;
-  const src = clean(text);
-  const lnk = s =>
-    s.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
-     .replace(/\*(.+?)\*/g,"<em>$1</em>")
-     .replace(/`(.+?)`/g,`<code style="background:#252525;padding:1px 5px;font-family:monospace;font-size:11px;border-radius:3px">$1</code>`)
-     .replace(/\[([^\]]+)\]\(([^)]+)\)/g,`<a href="$2" target="_blank" rel="noopener" style="color:${C.gold};text-decoration:none;border-bottom:1px solid ${C.goldD}">$1 ↗</a>`);
-  const lines = src.split("\n");
-  const out=[]; let tbl=[],lst=[],lstOrd=false;
-  const flushList=()=>{
-    if(!lst.length) return;
-    const Tag=lstOrd?"ol":"ul";
-    out.push(<Tag key={`l${out.length}`} style={{margin:"0.4rem 0",paddingLeft:"1.3rem"}}>{lst.map((t,i)=><li key={i} style={{margin:"0.2rem 0",lineHeight:"1.6",fontSize:"13px",color:C.text}} dangerouslySetInnerHTML={{__html:lnk(t)}}/>)}</Tag>);
-    lst=[]; lstOrd=false;
-  };
-  const flushTable=()=>{
-    if(!tbl.length) return;
-    const rows=tbl.filter(r=>!/^\|[\s:\-|]+\|$/.test(r.trim()));
-    if(!rows.length){tbl=[];return;}
-    const parse=r=>r.split("|").slice(1,-1).map(c=>c.trim());
-    const [head,...body]=rows;
-    out.push(<div key={`t${out.length}`} style={{overflowX:"auto",margin:"0.8rem 0"}}>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"13px"}}>
-        <thead><tr>{parse(head).map((h,i)=><th key={i} style={{padding:"10px 14px",textAlign:"left",fontWeight:"700",background:"#1c1c1c",color:C.gold,fontSize:"10px",letterSpacing:"0.1em",textTransform:"uppercase",border:`1px solid ${C.border}`,whiteSpace:"nowrap"}} dangerouslySetInnerHTML={{__html:lnk(h)}}/>)}</tr></thead>
-        <tbody>{body.map((r,i)=>{
-          const cells=parse(r);
-          const isBiz=r.includes("💺")||r.toLowerCase().includes("business");
-          const isMix=r.includes("🔀")||r.toLowerCase().includes("mixte")||r.toLowerCase().includes("optimal");
-          const isEco=r.includes("🪑")||r.toLowerCase().includes("économ");
-          let hl=false;
-          if(activeClass==="business"&&isBiz) hl=true;
-          if(activeClass==="mixte"&&isMix) hl=true;
-          if(activeClass==="eco"&&isEco) hl=true;
-          return <tr key={i} style={{background:hl?"rgba(201,169,110,0.1)":i%2===0?C.card:"#191919"}}>
-            {cells.map((c,j)=>{
-              const isP=/^\d[\d\s]+$/.test(c.trim())&&c.trim().replace(/\s/g,"").length>=3;
-              return <td key={j} style={{padding:"10px 14px",border:`1px solid ${C.border}`,lineHeight:"1.5",fontSize:"13px",fontWeight:isP?"900":j===0?"600":"400",letterSpacing:isP?"-0.02em":"normal",color:hl&&isP?C.gold:C.text}} dangerouslySetInnerHTML={{__html:lnk(c)}}/>;
-            })}
-          </tr>;
-        })}</tbody>
-      </table>
-    </div>);
-    tbl=[];
-  };
-  for(let i=0;i<lines.length;i++){
-    const l=lines[i];
-    if(/^IMAGES:/i.test(l)||/^#{1,3} /.test(l)) continue;
-    if(l.startsWith("|")){flushList();tbl.push(l);continue;}
-    flushTable();
-    if(/^[-*•] /.test(l)) lst.push(l.replace(/^[-*•] /,""));
-    else if(/^\d+\. /.test(l)){lstOrd=true;lst.push(l.replace(/^\d+\. /,""));}
-    else if(/^---+$/.test(l.trim())){flushList();out.push(<div key={i} style={{borderTop:`1px solid ${C.border}`,margin:"1.2rem 0"}}/>);}
-    else if(l.trim()===""){flushList();out.push(<div key={i} style={{height:"0.35rem"}}/>);}
-    else{flushList();out.push(<p key={i} style={{margin:"0.3rem 0",lineHeight:"1.75",fontSize:"13px",color:C.text}} dangerouslySetInnerHTML={{__html:lnk(l)}}/>);}
-  }
-  flushList();flushTable();
-  return <>{out}</>;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// PHOTO GRID
-// ═══════════════════════════════════════════════════════════════════
-
-function PhotoGrid({urls, name}) {
+function PhotoGrid({ urls, name }) {
   const [failed, setFailed] = useState({});
   const [lb, setLb] = useState(null);
-  const valid = urls.filter((_,i)=>!failed[i]);
+  const valid = (urls || []).filter((_, i) => !failed[i]);
 
-  if(!urls.length || valid.length===0) {
+  if (!urls || urls.length === 0 || valid.length === 0) {
     return (
-      <div style={{height:"180px",background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRadius:"12px 12px 0 0"}}>
-        <div style={{fontSize:"36px",marginBottom:"8px"}}>🏨</div>
-        <div style={{color:"rgba(255,255,255,0.7)",fontSize:"13px",fontWeight:"600"}}>{name}</div>
-        <div style={{color:"rgba(255,255,255,0.35)",fontSize:"11px",marginTop:"3px"}}>Photos non disponibles</div>
+      <div style={{ height: "200px", background: `linear-gradient(135deg, #1a1f3c 0%, #0f3460 50%, #1a1f3c 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: "12px 12px 0 0" }}>
+        <div style={{ fontSize: "40px", marginBottom: "8px", opacity: 0.6 }}>🏨</div>
+        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "12px" }}>Photos non disponibles</div>
       </div>
     );
   }
 
-  // Booking.com style: 1 large left + grid right
   return (
     <>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"130px 130px",gap:"3px",overflow:"hidden",borderRadius:"12px 12px 0 0",cursor:"zoom-in"}} onClick={()=>setLb(0)}>
-        <div style={{gridRow:"1/3",gridColumn:"1/2",overflow:"hidden"}}>
-          <img src={valid[0]} alt="" referrerPolicy="no-referrer"
-            onError={()=>setFailed(f=>({...f,[0]:true}))}
-            style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gridTemplateRows: "140px 140px", gap: "3px", overflow: "hidden", cursor: "zoom-in" }} onClick={() => setLb(0)}>
+        <div style={{ gridRow: "1/3", overflow: "hidden" }}>
+          <img src={valid[0]} alt="" referrerPolicy="no-referrer" onError={() => setFailed(f => ({ ...f, [0]: true }))} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         </div>
-        {[1,2,3,4].map(i=>(
-          valid[i] ? <div key={i} style={{overflow:"hidden",position:"relative"}}>
-            <img src={valid[i]} alt="" referrerPolicy="no-referrer"
-              onError={()=>setFailed(f=>({...f,[i]:true}))}
-              style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-            {i===4 && valid.length>5 && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"12px",fontWeight:"600"}}>+{valid.length-4} photos</div>}
-          </div> : <div key={i} style={{background:C.card2}}/>
-        ))}
+        {[1, 2, 3, 4].map(i => valid[i] ? (
+          <div key={i} style={{ overflow: "hidden", position: "relative" }}>
+            <img src={valid[i]} alt="" referrerPolicy="no-referrer" onError={() => setFailed(f => ({ ...f, [i]: true }))} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            {i === 4 && valid.length > 5 && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "13px", fontWeight: "700" }}>+{valid.length - 4} photos</div>}
+          </div>
+        ) : <div key={i} style={{ background: C.card2 }} />)}
       </div>
       {lb !== null && (
-        <div onClick={()=>setLb(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.96)",zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-          <img src={valid[lb]} alt="" referrerPolicy="no-referrer" style={{maxWidth:"90vw",maxHeight:"80vh",objectFit:"contain",borderRadius:"8px"}} onClick={e=>e.stopPropagation()}/>
-          <div style={{display:"flex",gap:"6px",marginTop:"14px"}}>
-            {valid.map((u,i)=><div key={i} onClick={e=>{e.stopPropagation();setLb(i);}} style={{width:"8px",height:"8px",borderRadius:"50%",background:i===lb?"#fff":"rgba(255,255,255,0.3)",cursor:"pointer"}}/>)}
+        <div onClick={() => setLb(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.96)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <img src={valid[lb]} alt="" referrerPolicy="no-referrer" style={{ maxWidth: "90vw", maxHeight: "85vh", objectFit: "contain", borderRadius: "8px" }} onClick={e => e.stopPropagation()} />
+          <div style={{ position: "absolute", bottom: "24px", display: "flex", gap: "6px" }}>
+            {valid.map((_, i) => <div key={i} onClick={e => { e.stopPropagation(); setLb(i); }} style={{ width: "8px", height: "8px", borderRadius: "50%", background: i === lb ? "#fff" : "rgba(255,255,255,0.3)", cursor: "pointer" }} />)}
           </div>
-          <button onClick={()=>setLb(null)} style={{position:"absolute",top:"20px",right:"24px",background:"none",border:"none",color:"#fff",fontSize:"28px",cursor:"pointer"}}>×</button>
+          <button onClick={() => setLb(null)} style={{ position: "absolute", top: "20px", right: "24px", background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "36px", height: "36px", borderRadius: "50%", cursor: "pointer", fontSize: "20px" }}>×</button>
         </div>
       )}
     </>
@@ -309,314 +322,246 @@ function PhotoGrid({urls, name}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ACCORDION CARD (no double emoji)
+// RECAP DISPLAY — clean hero summary
 // ═══════════════════════════════════════════════════════════════════
 
-function AccCard({title, children, defaultOpen=false, accent=false}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const {icon, label} = titleParts(title);
-  return (
-    <div style={{background:C.card,border:`1px solid ${accent?C.gold:C.border}`,borderRadius:"12px",marginBottom:"8px",overflow:"hidden"}}>
-      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${C.border}`:"none"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-          {icon && <span style={{fontSize:"16px"}}>{icon}</span>}
-          <span style={{fontSize:"11px",fontWeight:"700",letterSpacing:"0.12em",color:accent?C.gold:C.text,fontFamily:C.sans}}>{label}</span>
-        </div>
-        <span style={{color:C.muted,fontSize:"18px",fontWeight:"300",lineHeight:1}}>{open?"−":"+"}</span>
-      </button>
-      {open && <div style={{padding:"20px"}}>{children}</div>}
-    </div>
-  );
-}
+function RecapDisplay({ lines, activeClass, prices }) {
+  const all = clean(lines.join(" "));
+  const raw = clean(lines.join("\n"));
 
-// ═══════════════════════════════════════════════════════════════════
-// RECAP DISPLAY — Kayak-inspired dashboard
-// ═══════════════════════════════════════════════════════════════════
+  // Extract destinations
+  const destMatch = all.match(/(?:Destination[s]?[:\s]+|vers?\s+)([A-ZÀ-Ÿa-zà-ÿ\s,→]+?)(?:\s*\||\s*Dates|\s*Durée|\s*\d{1,2})/i);
+  const dest = destMatch ? destMatch[1].trim().replace(/\s*-\s*$/,"") : null;
 
-function RecapDisplay({lines, activeClass, prices}) {
-  const text = lines.join(" ");
-  // Extract key info
-  const destMatch = text.match(/(?:Destination[:\s]+|vers\s+)([A-Za-zÀ-ÿ\s,]+?)(?:\s*\||\s*Dates|\s*Durée|\s*\d)/i);
-  const dest = destMatch ? destMatch[1].trim() : null;
-  const nightsMatch = text.match(/(\d+)\s*nuits?/i);
+  // Extract nights
+  const nightsMatch = all.match(/(\d+)\s*nuits?/i);
   const nights = nightsMatch ? nightsMatch[1] : null;
-  const ratingMatch = text.match(/(\d+\.?\d*)\s*\/\s*10/);
-  const hotelRating = ratingMatch ? ratingMatch[1] : null;
-  const datesMatch = text.match(/(\d{1,2}[\/\s]\w+[\.\/\s]\d{2,4})\s*[-–—]\s*(\d{1,2}[\/\s]\w+[\.\/\s]\d{2,4})/i);
 
-  const classPrice = activeClass==="business" ? prices.business : activeClass==="mixte" ? prices.mixte : prices.eco;
-  const classEmoji = activeClass==="business" ? "💺" : activeClass==="mixte" ? "🔀" : "🪑";
-  const classLabel = activeClass==="business" ? "Business" : activeClass==="mixte" ? "Mixte" : "Économie";
+  // Extract hotel rating
+  const ratingMatch = all.match(/(\d+\.?\d*)\/10/);
+  const hotelRating = ratingMatch ? ratingMatch[1] : null;
+
+  // Extract travelers
+  const travMatch = all.match(/(\d+)\s*(?:personne|voyageur)/i);
+  const travelers = travMatch ? travMatch[1] : null;
+
+  // Extract dates
+  const datesMatch = all.match(/(\d{1,2}[\/\s]\w+\s*\d{0,4})\s*[-–—]\s*(\d{1,2}[\/\s]\w+\s*\d{0,4})/i);
+
+  const classPrice = activeClass === "business" ? prices.business : activeClass === "mixte" ? prices.mixte : prices.eco;
+  const classEmoji = activeClass === "business" ? "💺" : activeClass === "mixte" ? "🔀" : "🪑";
+  const classLabel = activeClass === "business" ? "Full Business" : activeClass === "mixte" ? "Mixte" : "Économie";
+
+  // Get clean prose from the section (no tables)
+  const proseLines = lines.filter(l => {
+    const t = l.trim();
+    if (!t || t === "|" || /^\|[\s:\-|]+\|$/.test(t)) return false;
+    if (/^IMAGES:/i.test(t) || /^#{1,4}\s/.test(t)) return false;
+    return true;
+  });
 
   return (
     <div>
-      {/* Hero destination line */}
-      <div style={{marginBottom:"20px"}}>
-        {dest && <div style={{fontSize:"24px",fontWeight:"900",color:C.text,letterSpacing:"-0.02em",marginBottom:"4px"}}>{dest}</div>}
-        {(nights||datesMatch) && (
-          <div style={{fontSize:"14px",color:C.muted}}>
-            {datesMatch ? `${datesMatch[1]} - ${datesMatch[2]}` : ""}{nights ? ` · ${nights} nuits` : ""}
-          </div>
-        )}
-      </div>
-
-      {/* Stats grid */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:"8px",marginBottom:"20px"}}>
-        {classPrice && (
-          <div style={{background:C.card2,border:`2px solid ${C.gold}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:"10px",color:C.gold,marginBottom:"4px",letterSpacing:"0.06em",fontWeight:"700"}}>{classEmoji} {classLabel.toUpperCase()}</div>
-            <div style={{fontSize:"22px",fontWeight:"900",color:C.gold,letterSpacing:"-0.02em"}}>{parseInt(classPrice.replace(/\s/g,"")).toLocaleString("fr-CH")}</div>
-            <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>CHF total</div>
-          </div>
-        )}
-        {nights && (
-          <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:"24px",marginBottom:"4px"}}>🌙</div>
-            <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{nights}</div>
-            <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>nuits</div>
-          </div>
-        )}
-        {hotelRating && (
-          <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-            <div style={{fontSize:"24px",marginBottom:"4px"}}>⭐</div>
-            <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{hotelRating}</div>
-            <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>note hôtel</div>
-          </div>
-        )}
-        <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-          <div style={{fontSize:"24px",marginBottom:"4px"}}>✈️</div>
-          <div style={{fontSize:"14px",fontWeight:"700",color:C.text}}>GVA</div>
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>aéroport départ</div>
+      {/* Hero */}
+      {dest && (
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "26px", fontWeight: "900", color: C.text, letterSpacing: "-0.02em", lineHeight: 1.1 }}>{dest}</div>
+          {datesMatch && <div style={{ fontSize: "14px", color: C.muted, marginTop: "4px" }}>{datesMatch[1]} - {datesMatch[2]}{nights ? ` · ${nights} nuits` : ""}</div>}
         </div>
+      )}
+
+      {/* Stats row */}
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "22px" }}>
+        {classPrice && (
+          <div style={{ flex: "1", minWidth: "120px", background: "rgba(201,169,110,0.1)", border: `2px solid ${C.gold}`, borderRadius: "12px", padding: "16px 14px", textAlign: "center" }}>
+            <div style={{ fontSize: "10px", color: C.gold, fontWeight: "700", letterSpacing: "0.1em", marginBottom: "6px" }}>{classEmoji} {classLabel.toUpperCase()}</div>
+            <div style={{ fontSize: "28px", fontWeight: "900", color: C.gold, letterSpacing: "-0.02em" }}>{parseInt((classPrice || "0").replace(/\s/g, "")).toLocaleString("fr-CH")}</div>
+            <div style={{ fontSize: "11px", color: C.goldD, marginTop: "3px" }}>CHF total</div>
+          </div>
+        )}
+        {[
+          nights && { icon: "🌙", value: nights, label: "nuits" },
+          hotelRating && { icon: "⭐", value: hotelRating, label: "/ 10 hôtel" },
+          travelers && { icon: "👤", value: travelers, label: travelers === "1" ? "voyageur" : "voyageurs" },
+        ].filter(Boolean).map((s, i) => (
+          <div key={i} style={{ flex: "1", minWidth: "90px", background: C.card2, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "16px 14px", textAlign: "center" }}>
+            <div style={{ fontSize: "22px", marginBottom: "6px" }}>{s.icon}</div>
+            <div style={{ fontSize: "22px", fontWeight: "900", color: C.text }}>{s.value}</div>
+            <div style={{ fontSize: "11px", color: C.muted, marginTop: "3px" }}>{s.label}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Full detail — filter out exchange rate noise and pipe-only lines */}
-      <MDInline text={lines.filter(l=>{
-        if(!l.trim()||l.trim()==="\|") return false;
-        if(/^\d+\s+[A-Z]+\s*=\s*[\d.]+\s+[A-Z]+/.test(l)) return false; // exchange rates
-        if(/^\(taux/.test(l.trim())) return false;
-        return true;
-      }).join("\n")} activeClass={activeClass}/>
+      {/* Clean prose details */}
+      <ProseBlock lines={proseLines} />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// FLIGHTS DISPLAY — Kayak-inspired
+// FLIGHT DISPLAY — clean Kayak-inspired
 // ═══════════════════════════════════════════════════════════════════
 
-function FlightDisplay({lines, activeClass, setActiveClass, prices}) {
-  // Split lines into legs by ### or "LEG N" bold headers
+function FlightDisplay({ lines, activeClass, setActiveClass, prices }) {
+  // Parse sub-sections by ### or **LEG** headers
   const legs = [];
   let cur = null;
-  for(const l of lines) {
+  for (const l of lines) {
     const h3 = l.match(/^### (.+)/);
-    const bold = l.match(/^\*\*(?:LEG|Vol)\s*\d+[^*]*\*\*/i);
-    const legLine = l.match(/^(?:LEG|Leg)\s*\d+[\s:]+(.+)/);
-    if(h3||bold||legLine){
-      if(cur) legs.push(cur);
-      const title = h3?h3[1]:(bold?l.replace(/\*\*/g,""):l);
-      cur = {title:title.trim(), lines:[]};
-    } else if(cur) cur.lines.push(l);
+    const bold = l.match(/^\*\*(LEG|Vol|Leg)\s*\d+[^*]*\*\*/i);
+    const plain = l.match(/^(LEG|Leg)\s*\d+\s*[:·-]\s*(.+)/i);
+    if (h3 || bold || plain) {
+      if (cur) legs.push(cur);
+      const title = h3 ? h3[1] : bold ? l.replace(/\*\*/g, "") : l;
+      cur = { title: title.trim(), lines: [] };
+    } else if (cur) { cur.lines.push(l); }
   }
-  if(cur) legs.push(cur);
+  if (cur) legs.push(cur);
 
   return (
     <div>
-      {/* Class selector tabs */}
-      <div style={{display:"flex",borderRadius:"10px",overflow:"hidden",border:`1px solid ${C.border}`,marginBottom:"20px"}}>
+      {/* Class tabs */}
+      <div style={{ display: "flex", borderRadius: "12px", overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: "20px" }}>
         {[
-          {id:"business",emoji:"💺",label:"Full Business",price:prices.business},
-          {id:"mixte",emoji:"🔀",label:"Mixte",price:prices.mixte},
-          {id:"eco",emoji:"🪑",label:"Économie",price:prices.eco},
-        ].map((c,i)=>(
-          <button key={c.id} onClick={()=>setActiveClass(c.id)} style={{flex:1,padding:"13px 8px",textAlign:"center",background:activeClass===c.id?C.gold:C.card2,color:activeClass===c.id?"#0a0a0a":C.muted,border:"none",borderLeft:i>0?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"all 0.2s"}}>
-            <div style={{fontSize:"12px",fontWeight:"700"}}>{c.emoji} {c.label}</div>
-            {c.price&&<div style={{fontSize:"16px",fontWeight:"900",marginTop:"3px",letterSpacing:"-0.02em"}}>{parseInt((c.price||"0").replace(/\s/g,"")).toLocaleString("fr-CH")} CHF</div>}
+          { id: "business", emoji: "💺", label: "Full Business", price: prices.business },
+          { id: "mixte", emoji: "🔀", label: "Mixte", price: prices.mixte },
+          { id: "eco", emoji: "🪑", label: "Économie", price: prices.eco },
+        ].map((c, i) => (
+          <button key={c.id} onClick={() => setActiveClass(c.id)} style={{ flex: 1, padding: "14px 8px", textAlign: "center", background: activeClass === c.id ? C.gold : C.card2, color: activeClass === c.id ? "#0a0a0a" : C.muted, border: "none", borderLeft: i > 0 ? `1px solid ${C.border}` : "none", cursor: "pointer", transition: "all 0.2s" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700" }}>{c.emoji} {c.label}</div>
+            {c.price && <div style={{ fontSize: "17px", fontWeight: "900", marginTop: "3px", letterSpacing: "-0.02em" }}>{parseInt((c.price || "0").replace(/\s/g, "")).toLocaleString("fr-CH")} CHF</div>}
           </button>
         ))}
       </div>
-      {/* Render legs as clean cards, or full MDInline if no legs found */}
-      {legs.length>1 ? legs.map((leg,i)=>(
-        <div key={i} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",marginBottom:"8px",overflow:"hidden"}}>
-          <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.border}`,fontSize:"11px",fontWeight:"700",letterSpacing:"0.08em",color:C.gold}}>{leg.title}</div>
-          <div style={{padding:"14px 16px"}}><MDInline text={leg.lines.join("\n")} activeClass={activeClass}/></div>
-        </div>
-      )) : <MDInline text={lines.join("\n")} activeClass={activeClass}/>}
-    </div>
-  );
-}
 
-) {
-  const text = lines.join(" ");
-  // Parse times
-  const timeMatch = text.match(/(\d{2}:\d{2})/g)||[];
-  const dep = timeMatch[0]||null;
-  const arr = timeMatch[1]||null;
-  // Parse company
-  const compMatch = text.match(/(?:Compagnie|avec|sur)\s*[:·]?\s*([A-Za-z\s&]+?)(?:\s*\(|\s*\||\s*[-,]|\s*\d)/i);
-  const company = compMatch ? compMatch[1].trim() : null;
-  // Parse duration
-  const durMatch = text.match(/(\d+h\d*(?:\s*min)?)/i);
-  const duration = durMatch ? durMatch[1] : null;
-  // Parse stops
-  const stopsMatch = text.match(/(\d+)\s*escale/i);
-  const stops = stopsMatch ? stopsMatch[1] : text.toLowerCase().includes("direct")?"0":null;
-  // Parse price for active class
-  const priceRe = activeClass==="business"?/business[^0-9]*(\d[\d\s]+)\s*CHF/i:activeClass==="eco"?/éco[^0-9]*(\d[\d\s]+)\s*CHF/i:/mix[^0-9]*(\d[\d\s]+)\s*CHF/i;
-  const priceMatch = text.match(priceRe);
-  const price = priceMatch ? priceMatch[1].trim() : null;
-  // Parse link
-  const linkMatch = text.match(/\[(?:Kayak|Réserver)[^\]]*\]\(([^)]+)\)/i);
-  const link = linkMatch ? linkMatch[1] : null;
-  // Parse baggage
-  const bagMatch = text.match(/bagage[s]?\s*[:·]\s*([^,\n|]+)/i);
-  const baggage = bagMatch ? bagMatch[1].trim() : null;
-
-  return (
-    <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"12px",marginBottom:"10px",overflow:"hidden"}}>
-      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.border}`,fontSize:"10px",fontWeight:"700",letterSpacing:"0.1em",color:C.muted}}>{title}</div>
-      {(dep||arr||company) ? (
-        <div style={{padding:"16px"}}>
-          {/* Main flight info row */}
-          <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"12px"}}>
-            {company && <div style={{fontSize:"13px",fontWeight:"700",color:C.text,minWidth:"100px"}}>{company}</div>}
-            <div style={{display:"flex",alignItems:"center",gap:"8px",flex:1}}>
-              {dep && <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{dep}</div>}
-              <div style={{flex:1,textAlign:"center"}}>
-                {duration && <div style={{fontSize:"11px",color:C.muted,marginBottom:"2px"}}>{duration}</div>}
-                <div style={{height:"1px",background:C.border,position:"relative"}}>
-                  <div style={{position:"absolute",left:"50%",top:"-5px",transform:"translateX(-50%)",color:C.gold,fontSize:"12px"}}>→</div>
-                </div>
-                {stops!==null && <div style={{fontSize:"10px",color:stops==="0"?C.green:C.muted,marginTop:"2px",fontWeight:"600"}}>{stops==="0"?"Direct":`${stops} escale${stops!=="1"?"s":""}`}</div>}
-              </div>
-              {arr && <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{arr}</div>}
-            </div>
+      {/* Legs */}
+      {legs.length > 1 ? legs.map((leg, i) => (
+        <div key={i} style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden" }}>
+          <div style={{ padding: "12px 18px", borderBottom: `1px solid ${C.border}`, background: "rgba(201,169,110,0.05)" }}>
+            <span style={{ fontSize: "11px", fontWeight: "800", color: C.gold, letterSpacing: "0.08em" }}>{leg.title}</span>
           </div>
-          {/* Details row */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{display:"flex",gap:"12px"}}>
-              {baggage && <span style={{fontSize:"11px",color:C.muted}}>🧳 {baggage}</span>}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
-              {price && <div style={{fontSize:"18px",fontWeight:"900",color:C.gold}}>{price} CHF</div>}
-              {link && <a href={link} target="_blank" rel="noopener" style={{fontSize:"11px",padding:"6px 12px",background:C.gold,color:"#0a0a0a",borderRadius:"6px",textDecoration:"none",fontWeight:"700",whiteSpace:"nowrap"}}>Réserver ↗</a>}
-            </div>
+          <div style={{ padding: "16px 18px" }}>
+            <ProseBlock lines={leg.lines} />
           </div>
-          {/* Full details */}
-          <details style={{marginTop:"10px"}}>
-            <summary style={{fontSize:"11px",color:C.muted,cursor:"pointer",listStyle:"none"}}>Voir les détails du vol ▾</summary>
-            <div style={{marginTop:"10px"}}><MDInline text={lines.join("\n")} activeClass={activeClass}/></div>
-          </details>
         </div>
-      ) : (
-        <div style={{padding:"16px"}}><MDInline text={lines.join("\n")} activeClass={activeClass}/></div>
-      )}
+      )) : <ProseBlock lines={lines} />}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// HOTEL CARD — Booking/Hyatt inspired
+// HOTEL CARD — Booking.com inspired, no raw tables
 // ═══════════════════════════════════════════════════════════════════
 
-function DestinationHeader({name}) {
-  return (
-    <div style={{padding:"10px 0 6px",borderBottom:`1px solid ${C.border}`,marginBottom:"10px"}}>
-      <span style={{fontSize:"11px",fontWeight:"700",letterSpacing:"0.12em",color:C.gold}}>{name.toUpperCase()}</span>
-    </div>
-  );
+function DestinationHeader({ name }) {
+  return <div style={{ padding: "8px 0 12px", fontSize: "11px", fontWeight: "800", letterSpacing: "0.12em", color: C.gold, borderBottom: `1px solid ${C.border}`, marginBottom: "14px" }}>{name.toUpperCase()}</div>;
 }
 
-function HotelCard({name, lines}) {
+function HotelCard({ name, lines }) {
   const [open, setOpen] = useState(true);
   const images = extractImages(lines);
-  // Filter: no IMAGES lines, no table separator lines, no raw pipe-only lines
-  const content = lines.filter(l=>{
-    if(/^IMAGES:/i.test(l)) return false;
-    if(/^\|[\s:\-|]+\|$/.test(l.trim())) return false;
+
+  // Parse the CRITÈRE|DÉTAIL table
+  const td = parseTable(lines);
+  const rating = (td["note"] || "").match(/(\d+\.?\d*)/)?.[1] || null;
+  const stars = (td["etoiles"] || "").replace(/[^★]/g, "").length || null;
+  const zone = td["zone"] || td["emplacement"] || null;
+  const room = td["chambre"] || null;
+  const amenities = (td["equipements"] || "").split(",").map(s => s.trim()).filter(s => s && s.length > 1).slice(0, 6);
+  const piscine = td["piscine"] && /oui|yes/i.test(td["piscine"]);
+  const spa = td["spa"] && /oui|yes/i.test(td["spa"]);
+  const vue = td["vue"] || null;
+  const petitdej = td["petit-dejeuner"] || td["petit_dejeuner"] || null;
+  const priceNight = (td["prix/nuit"] || td["prix_nuit"] || "").match(/(\d[\d\s]+)/)?.[1]?.replace(/\s/g, "");
+  const priceTotal = (td["prix_total"] || td["prix total"] || "").match(/(\d[\d\s]+)/)?.[1]?.replace(/\s/g, "");
+
+  // Find booking link — look for [Booking...](url) in table OR lines
+  let bookingLink = null;
+  const allText = lines.join(" ");
+  const linkMatch = allText.match(/\[(?:Booking|Réserver)[^\]]*\]\(([^)]+)\)/i);
+  if (linkMatch) bookingLink = linkMatch[1];
+
+  // Prose lines — exclude table rows, IMAGES, links-only lines, raw URLs
+  const proseLines = lines.filter(l => {
+    const t = l.trim();
+    if (!t || /^IMAGES:/i.test(t) || /^#{1,4}\s/.test(t)) return false;
+    if (/^\|/.test(t)) return false;
+    if (/^(https?:)?\/\//.test(t)) return false; // raw URLs
+    if (/^\[Site officiel\]|^\[Booking/.test(t)) return false;
     return true;
-  });
-  const text = content.join(" ");
+  }).slice(0, 5); // max 5 prose lines for the recap
 
-  // Extract structured info
-  const ratingMatch = text.match(/(?:Note|Avis)[^0-9]*(\d+\.?\d*)\s*\/\s*10/i)||text.match(/(\d+\.?\d*)\s*\/\s*10/);
-  const rating = ratingMatch ? parseFloat(ratingMatch[1]) : null;
-  const starsMatch = text.match(/(★{3,5})/);
-  const stars = starsMatch ? starsMatch[1].length : null;
-  const priceNightMatch = text.match(/(\d[\d\s]+)\s*CHF\s*\/\s*nuit/i);
-  const priceNight = priceNightMatch ? priceNightMatch[1].replace(/\s/g,"") : null;
-  const priceTotalMatch = text.match(/(\d[\d\s]+)\s*CHF\s*(?:total|pour\s*\d)/i);
-  const priceTotal = priceTotalMatch ? priceTotalMatch[1].replace(/\s/g,"") : null;
-  const zoneMatch = text.match(/(?:Zone|Emplacement|Quartier)[^:]*:\s*([^,\n|]+)/i);
-  const zone = zoneMatch ? zoneMatch[1].trim() : null;
-  const bookingMatch = text.match(/\[(?:Booking|Réserver|Voir)[^\]]*\]\(([^)]+)\)/i);
-  const bookingLink = bookingMatch ? bookingMatch[1] : null;
-  // Extract amenities from bullet points
-  const amenities = [];
-  for(const l of content) {
-    if(/^[-•✅✓]\s/.test(l)) amenities.push(l.replace(/^[-•✅✓]\s*/,"").trim().split(":")[0].trim());
-    else if(l.includes("✅")||l.includes("✓")) {
-      const items = l.split(/[✅✓]/).slice(1).map(s=>s.trim().split(/[:·]/)[0].trim()).filter(s=>s);
-      amenities.push(...items);
-    }
-  }
+  // Amenity chips
+  const chips = [
+    ...amenities.map(a => ({ label: a })),
+    piscine && { label: "Piscine" },
+    spa && { label: "Spa" },
+    vue && { label: vue.split(",")[0].trim() },
+    petitdej && !petitdej.toLowerCase().includes("non") && { label: "Petit-déjeuner" },
+    room && { label: room.split(",")[0].trim() },
+  ].filter(Boolean);
 
-  const ratingColor = rating>=9?"#16a34a":rating>=8?"#15803d":"#166534";
-  const ratingLabel = rating>=9?"Excellent":rating>=8?"Très bien":rating>=7?"Bien":"";
+  const ratingNum = parseFloat(rating || "0");
+  const ratingColor = ratingNum >= 9 ? "#16a34a" : ratingNum >= 8 ? "#1d8348" : "#2e7d32";
+  const ratingLabel = ratingNum >= 9 ? "Excellent" : ratingNum >= 8 ? "Très bien" : ratingNum >= 7 ? "Bien" : "";
 
   return (
-    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",marginBottom:"14px",overflow:"hidden"}}>
-      {/* Header toggle */}
-      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${C.border}`:"none"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-          {stars && <span style={{color:C.gold,fontSize:"12px"}}>{"★".repeat(stars)}</span>}
-          <span style={{fontSize:"15px",fontWeight:"700",color:C.text}}>{name}</span>
+    <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "14px", marginBottom: "14px", overflow: "hidden" }}>
+      {/* Collapse toggle */}
+      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "none", border: "none", cursor: "pointer", borderBottom: open ? `1px solid ${C.border}` : "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {stars > 0 && <span style={{ color: C.gold, fontSize: "12px", letterSpacing: "-1px" }}>{"★".repeat(stars)}</span>}
+          <span style={{ fontSize: "15px", fontWeight: "700", color: C.text }}>{name}</span>
         </div>
-        <span style={{color:C.muted,fontSize:"16px"}}>{open?"−":"+"}</span>
+        <span style={{ color: C.muted, fontSize: "16px" }}>{open ? "−" : "+"}</span>
       </button>
 
       {open && (
         <>
           {/* Photo grid */}
-          <PhotoGrid urls={images} name={name}/>
+          <PhotoGrid urls={images} name={name} />
 
-          <div style={{padding:"18px"}}>
-            {/* Rating + price header */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px"}}>
+          <div style={{ padding: "20px" }}>
+            {/* Header row: zone + rating */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
               <div>
-                {zone && <div style={{fontSize:"12px",color:C.muted,marginBottom:"4px"}}>📍 {zone}</div>}
+                {zone && <div style={{ fontSize: "13px", color: C.muted, marginBottom: "4px" }}>📍 {zone}</div>}
                 {priceNight && (
-                  <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
-                    <span style={{fontSize:"26px",fontWeight:"900",color:C.gold}}>{parseInt(priceNight).toLocaleString("fr-CH")} CHF</span>
-                    <span style={{fontSize:"12px",color:C.muted}}>/ nuit</span>
-                    {priceTotal && <span style={{fontSize:"13px",color:C.muted}}>· {parseInt(priceTotal).toLocaleString("fr-CH")} CHF total</span>}
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "4px" }}>
+                    <span style={{ fontSize: "28px", fontWeight: "900", color: C.gold, letterSpacing: "-0.02em" }}>{parseInt(priceNight).toLocaleString("fr-CH")}</span>
+                    <span style={{ fontSize: "13px", color: C.muted }}>CHF / nuit</span>
+                    {priceTotal && <span style={{ fontSize: "13px", color: C.muted }}>· {parseInt(priceTotal).toLocaleString("fr-CH")} CHF total</span>}
                   </div>
                 )}
               </div>
               {rating && (
-                <div style={{background:ratingColor,borderRadius:"8px 8px 8px 0",padding:"10px 14px",textAlign:"center",minWidth:"54px"}}>
-                  <div style={{fontSize:"20px",fontWeight:"900",color:"#fff"}}>{rating}</div>
-                  <div style={{fontSize:"9px",color:"rgba(255,255,255,0.8)",marginTop:"1px"}}>{ratingLabel}</div>
+                <div style={{ background: ratingColor, borderRadius: "10px 10px 10px 0", padding: "10px 14px", textAlign: "center", minWidth: "56px", flexShrink: 0 }}>
+                  <div style={{ fontSize: "20px", fontWeight: "900", color: "#fff" }}>{rating}</div>
+                  <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.8)", marginTop: "1px" }}>{ratingLabel}</div>
                 </div>
               )}
             </div>
 
-            {/* Amenities chips */}
-            {amenities.length>0 && (
-              <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"14px"}}>
-                {[...new Set(amenities)].slice(0,10).map((a,i)=>(
-                  <span key={i} style={{fontSize:"11px",color:C.muted,background:C.card2,padding:"4px 10px",borderRadius:"12px",border:`1px solid ${C.border}`}}>✓ {a}</span>
+            {/* Prose recap */}
+            {proseLines.length > 0 && (
+              <p style={{ fontSize: "13px", color: C.muted, lineHeight: "1.7", margin: "0 0 16px" }}
+                dangerouslySetInnerHTML={{ __html: renderInline(proseLines.join(" ").replace(/\*\*(.+?)\*\*/g, "$1")) }} />
+            )}
+
+            {/* Amenity chips */}
+            {chips.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "18px" }}>
+                {chips.map((c, i) => (
+                  <span key={i} style={{ fontSize: "12px", color: C.muted, background: C.card, border: `1px solid ${C.border}`, padding: "5px 12px", borderRadius: "20px" }}>
+                    ✓ {c.label}
+                  </span>
                 ))}
               </div>
             )}
 
-            {/* Full content */}
-            <MDInline text={content.join("\n")}/>
-
             {/* Book button */}
             {bookingLink && (
-              <a href={bookingLink} target="_blank" rel="noopener" style={{display:"inline-block",marginTop:"14px",padding:"11px 20px",background:C.gold,color:"#0a0a0a",borderRadius:"8px",fontSize:"12px",fontWeight:"700",textDecoration:"none",letterSpacing:"0.05em"}}>
+              <a href={bookingLink} target="_blank" rel="noopener" style={{ display: "inline-block", padding: "12px 22px", background: C.gold, color: "#0a0a0a", borderRadius: "10px", fontSize: "13px", fontWeight: "700", textDecoration: "none", letterSpacing: "0.03em" }}>
                 Réserver ↗
               </a>
             )}
@@ -628,218 +573,221 @@ function HotelCard({name, lines}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TOTAUX DISPLAY — clean 3-column
+// TOTAUX DISPLAY — 3 visual cards + clean breakdown
 // ═══════════════════════════════════════════════════════════════════
 
-function TotauxDisplay({lines, activeClass}) {
-  const text = lines.join("\n");
-  // Try to extract structured totals
-  // Extract largest numbers associated with each scenario
-  const extractNum = (patterns) => {
-    for(const p of patterns){
-      const m = text.match(p);
-      if(m) {
-        const n = parseInt(m[1].replace(/[\s\u202f]/g,""));
-        if(n>100) return n.toLocaleString("fr-CH");
-      }
-    }
-    return "-";
-  };
-  const totalBiz = extractNum([/TOTAL[^|\n]*\|[^|\n]*([\d\s]{3,})[^|\n]*\|[^|\n]*([\d\s]{3,})[^|\n]*\|[^|\n]*([\d\s]{3,})/i, /(?:Full\s*)?Business[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?(?=[^0-9]|$)/i]);
-  const totalMix = extractNum([/Mixte[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?(?=[^0-9]|$)/i, /mix[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?/i]);
-  const totalEco = extractNum([/(?:Full\s*)?[EÉ]co[^0-9]*(\d[\d\s]{2,})(?:\s*CHF)?(?=[^0-9]|$)/i, /éco[^0-9]*(\d[\d\s]{2,})/i]);
+function TotauxDisplay({ lines, activeClass }) {
+  const text = lines.join(" ");
 
-  const hasExtracted = totalBiz!=="-"||totalMix!=="-"||totalEco!=="-";
-
-  if(hasExtracted) {
-    return (
-      <div>
-        {/* Visual comparison */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"16px"}}>
-          {[
-            {id:"business",emoji:"💺",label:"Full Business",total:totalBiz},
-            {id:"mixte",emoji:"🔀",label:"Mixte",total:totalMix},
-            {id:"eco",emoji:"🪑",label:"Économie",total:totalEco},
-          ].map(c=>(
-            <div key={c.id} style={{background:activeClass===c.id?"rgba(201,169,110,0.12)":C.card2,border:`1px solid ${activeClass===c.id?C.gold:C.border}`,borderRadius:"10px",padding:"14px 12px",textAlign:"center"}}>
-              <div style={{fontSize:"11px",fontWeight:"700",color:activeClass===c.id?C.gold:C.muted,marginBottom:"8px"}}>{c.emoji} {c.label}</div>
-              <div style={{fontSize:"22px",fontWeight:"900",color:activeClass===c.id?C.gold:C.text,letterSpacing:"-0.02em"}}>{c.total}</div>
-              <div style={{fontSize:"10px",color:C.muted,marginTop:"3px"}}>CHF total</div>
-            </div>
-          ))}
-        </div>
-        <MDInline text={lines.join("\n")} activeClass={activeClass}/>
-      </div>
-    );
+  // Better price extraction — find the TOTAL row in the table
+  const totalRow = lines.find(l => /total/i.test(l) && l.startsWith("|"));
+  let bizTotal, mixTotal, ecoTotal;
+  if (totalRow) {
+    const cells = totalRow.split("|").slice(1, -1).map(c => c.trim().replace(/\s/g, "")).filter(c => /\d{3,}/.test(c));
+    if (cells.length >= 3) { bizTotal = cells[0]; mixTotal = cells[1]; ecoTotal = cells[2]; }
+    else if (cells.length >= 2) { bizTotal = cells[0]; mixTotal = cells[1]; }
   }
-  return <MDInline text={lines.join("\n")} activeClass={activeClass}/>;
-}
 
-// ═══════════════════════════════════════════════════════════════════
-// METEO DISPLAY — icons + slider
-// ═══════════════════════════════════════════════════════════════════
+  // Fallback: scan for largest numbers near scenario names
+  const get = (p) => { const m = text.match(p); return m ? parseInt(m[1].replace(/\s/g, "")).toLocaleString("fr-CH") : null; };
+  if (!bizTotal) bizTotal = get(/(?:Full\s*)?Business[^\d]*(\d[\d\s]{2,})/i);
+  if (!mixTotal) mixTotal = get(/Mixte[^\d]*(\d[\d\s]{2,})/i) || get(/mix[^\d]*(\d[\d\s]{2,})/i);
+  if (!ecoTotal) ecoTotal = get(/[EÉ]co[^\d]*(\d[\d\s]{2,})/i);
 
-function MeteoDisplay({lines}) {
-  const text = lines.join("\n");
-  const src = clean(text);
-  const emoji = wxEmoji(src);
-  const temps = (src.match(/(\d{1,2})°/g)||[]).map(t=>parseInt(t));
-  const maxT = temps.length?Math.max(...temps):null;
-  const minT = temps.length>1?Math.min(...temps):null;
-  const seaM = src.match(/mer[^.]*?(\d{1,2})°/i);
-  const seaT = seaM?seaM[1]:null;
-  // Parse weekly periods for slider
-  const periods = [];
-  const weekMatches = [...src.matchAll(/(?:semaine|période|week)\s*(\d)?[^:\n]*[:\n]([^\n]+)/gi)];
-  weekMatches.forEach((m,i)=>periods.push({label:`Sem. ${i+1}`,desc:m[2].trim()}));
-  const [periodIdx, setPeriodIdx] = useState(0);
-
-  // Clean text lines — strip bullets, apply inline markdown
-  const inlineMd = s => s
-    .replace(/\*\*(.+?)\*\*/g,"<strong style='color:"+C.text+"'>$1</strong>")
-    .replace(/\*(.+?)\*/g,"<em>$1</em>");
-  const cleanLines = src.split("\n")
-    .map(l=>l.replace(/^[-•]\s*/,"").replace(/,\s*,/g,",").trim())
-    .filter(l=>l && !/^\|/.test(l));
+  const fmtN = v => { try { return parseInt((v || "0").replace(/\s/g, "")).toLocaleString("fr-CH"); } catch { return v || "-"; } };
 
   return (
     <div>
-      {/* Stats grid */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(80px,1fr))",gap:"8px",marginBottom:"16px"}}>
-        {maxT&&<div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 10px",textAlign:"center"}}>
-          <div style={{fontSize:"28px",marginBottom:"4px"}}>{emoji}</div>
-          <div style={{fontSize:"22px",fontWeight:"900",color:C.gold}}>{maxT}°</div>
-          {minT&&<div style={{fontSize:"11px",color:C.muted}}>min {minT}°</div>}
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>Température</div>
-        </div>}
-        {seaT&&<div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 10px",textAlign:"center"}}>
-          <div style={{fontSize:"28px",marginBottom:"4px"}}>🌊</div>
-          <div style={{fontSize:"22px",fontWeight:"900",color:C.text}}>{seaT}°</div>
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>Mer</div>
-        </div>}
-        <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 10px",textAlign:"center"}}>
-          <div style={{fontSize:"28px",marginBottom:"4px"}}>{src.toLowerCase().includes("rare")||src.toLowerCase().includes("sec")?"☀️":"💧"}</div>
-          <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{src.toLowerCase().includes("rare")||src.toLowerCase().includes("sec")?"Rares":"Modérées"}</div>
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>Précipitations</div>
-        </div>
-        <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 10px",textAlign:"center"}}>
-          <div style={{fontSize:"28px",marginBottom:"4px"}}>🕶</div>
-          <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{src.toLowerCase().includes("élevé")||src.toLowerCase().includes("fort")?"Élevé":"Modéré"}</div>
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>UV</div>
-        </div>
+      {/* 3 scenario cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "20px" }}>
+        {[
+          { id: "business", emoji: "💺", label: "Full Business", total: bizTotal },
+          { id: "mixte", emoji: "🔀", label: "Mixte", total: mixTotal },
+          { id: "eco", emoji: "🪑", label: "Économie", total: ecoTotal },
+        ].map(c => {
+          const active = activeClass === c.id;
+          return (
+            <div key={c.id} style={{ background: active ? "rgba(201,169,110,0.1)" : C.card2, border: `2px solid ${active ? C.gold : C.border}`, borderRadius: "12px", padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: active ? C.gold : C.muted, marginBottom: "8px", letterSpacing: "0.06em" }}>{c.emoji} {c.label.toUpperCase()}</div>
+              <div style={{ fontSize: "26px", fontWeight: "900", color: active ? C.gold : C.text, letterSpacing: "-0.02em" }}>{c.total ? fmtN(c.total) : "-"}</div>
+              <div style={{ fontSize: "11px", color: C.muted, marginTop: "4px" }}>CHF</div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Period slider */}
-      {periods.length>1 && (
-        <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 16px",marginBottom:"14px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
-            <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.08em",textTransform:"uppercase"}}>Période sélectionnée</span>
-            <span style={{fontSize:"12px",fontWeight:"700",color:C.text}}>{periods[periodIdx].label}</span>
-          </div>
-          <input type="range" min="0" max={periods.length-1} value={periodIdx} onChange={e=>setPeriodIdx(+e.target.value)} style={{width:"100%",accentColor:C.gold,cursor:"pointer",marginBottom:"8px"}}/>
-          <p style={{fontSize:"13px",color:C.muted,lineHeight:"1.6",margin:0}}>{periods[periodIdx].desc}</p>
+      {/* Detail breakdown table */}
+      <ProseBlock lines={lines} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// METEO DISPLAY — icons + destination selector + clean text
+// ═══════════════════════════════════════════════════════════════════
+
+function MeteoDisplay({ lines }) {
+  const [destIdx, setDestIdx] = useState(0);
+  const src = clean(lines.join("\n"));
+
+  // Try to split by destination if multi-destination
+  const destBlocks = [];
+  let curBlock = { dest: null, lines: [] };
+  for (const l of lines) {
+    const destHeader = l.match(/^\*\*([A-ZÀ-Ÿa-zà-ÿ\s]+(?:juillet|juin|août|sept)?[^*]*)\*\*\s*[:\-]/i)
+      || l.match(/^##?\s*([A-ZÀ-Ÿa-zà-ÿ\s]{3,})\s*[\(:]/) ;
+    if (destHeader && destBlocks.length > 0) {
+      if (curBlock.lines.length > 0) destBlocks.push(curBlock);
+      curBlock = { dest: destHeader[1].trim(), lines: [l] };
+    } else {
+      curBlock.lines.push(l);
+    }
+  }
+  if (curBlock.lines.length > 0) destBlocks.push(curBlock);
+
+  const hasDests = destBlocks.length > 1 && destBlocks[0].dest;
+  const activeSrc = hasDests ? clean(destBlocks[destIdx].lines.join("\n")) : src;
+
+  const emoji = wxEmoji(activeSrc);
+  const temps = (activeSrc.match(/(\d{1,2})°/g) || []).map(t => parseInt(t)).filter(t => t > 0 && t < 50);
+  const maxT = temps.length ? Math.max(...temps) : null;
+  const minT = temps.length > 1 ? Math.min(...temps) : null;
+  const seaM = activeSrc.match(/(?:mer|ocean|eau)[^.]*?(\d{1,2})°/i);
+  const seaT = seaM ? seaM[1] : null;
+
+  // Clean prose lines — no bullets, no periods on own line, join sentences
+  const cleanProse = clean(activeSrc).split("\n")
+    .map(l => l.replace(/^[-•*]\s*/, "").trim())
+    .filter(l => l && l.length > 3 && !/^\|/.test(l) && l !== ".")
+    .map(l => l.replace(/\*\*(.+?)\*\*/g, "$1"));
+
+  return (
+    <div>
+      {/* Destination selector */}
+      {hasDests && (
+        <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" }}>
+          {destBlocks.map((b, i) => (
+            <button key={i} onClick={() => setDestIdx(i)} style={{ padding: "6px 14px", borderRadius: "20px", border: `1px solid ${i === destIdx ? C.gold : C.border}`, background: i === destIdx ? "rgba(201,169,110,0.15)" : "transparent", color: i === destIdx ? C.gold : C.muted, fontSize: "12px", cursor: "pointer", fontWeight: i === destIdx ? "700" : "400" }}>
+              {b.dest || `Destination ${i + 1}`}
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Clean text content */}
-      <div style={{lineHeight:"1.8"}}>
-        {cleanLines.map((l,i)=>{
-          if(!l.trim()) return null;
-          // Section headers (bold) get a slightly different style
-          const isHeader = l.startsWith("**") || l.match(/^[A-ZÀÂÉÈÊ][a-zàâéèê]+\s+\(/);
-          return <p key={i} style={{margin:"0 0 7px",fontSize:"13px",color:isHeader?C.text:C.muted,fontWeight:isHeader?"600":"400"}} dangerouslySetInnerHTML={{__html:inlineMd(l)}}/>;
-        })}
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "8px", marginBottom: "18px" }}>
+        {maxT && (
+          <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "16px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: "28px", marginBottom: "6px" }}>{emoji}</div>
+            <div style={{ fontSize: "24px", fontWeight: "900", color: C.gold }}>{maxT}°</div>
+            {minT && <div style={{ fontSize: "11px", color: C.muted, marginTop: "2px" }}>min {minT}°</div>}
+            <div style={{ fontSize: "10px", color: C.muted, marginTop: "3px" }}>Température</div>
+          </div>
+        )}
+        {seaT && (
+          <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "16px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: "28px", marginBottom: "6px" }}>🌊</div>
+            <div style={{ fontSize: "24px", fontWeight: "900", color: C.text }}>{seaT}°</div>
+            <div style={{ fontSize: "10px", color: C.muted, marginTop: "3px" }}>Mer</div>
+          </div>
+        )}
+        <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "16px 12px", textAlign: "center" }}>
+          <div style={{ fontSize: "28px", marginBottom: "6px" }}>{activeSrc.toLowerCase().includes("rare") || activeSrc.toLowerCase().includes("sec") ? "☀️" : "🌦️"}</div>
+          <div style={{ fontSize: "13px", fontWeight: "700", color: C.text }}>{activeSrc.toLowerCase().includes("rare") || activeSrc.toLowerCase().includes("sec") ? "Rares" : "Modérées"}</div>
+          <div style={{ fontSize: "10px", color: C.muted, marginTop: "3px" }}>Précipitations</div>
+        </div>
+        <div style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "16px 12px", textAlign: "center" }}>
+          <div style={{ fontSize: "28px", marginBottom: "6px" }}>🕶</div>
+          <div style={{ fontSize: "13px", fontWeight: "700", color: C.text }}>{activeSrc.toLowerCase().includes("élevé") || activeSrc.toLowerCase().includes("fort") ? "Élevé" : "Modéré"}</div>
+          <div style={{ fontSize: "10px", color: C.muted, marginTop: "3px" }}>UV</div>
+        </div>
+      </div>
+
+      {/* Prose */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {cleanProse.map((l, i) => (
+          <p key={i} style={{ margin: 0, fontSize: "14px", color: C.muted, lineHeight: "1.7" }}
+            dangerouslySetInnerHTML={{ __html: renderInline(l) }} />
+        ))}
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CALENDRIER — timeline
+// CALENDRIER — proper timeline
 // ═══════════════════════════════════════════════════════════════════
 
-function CalendrierDisplay({lines}) {
-  const text = lines.join("\n");
-  // Parse day entries: "30/06 | Lieu | Activité" or "Jour 1 : ..."
+function CalendrierDisplay({ lines }) {
   const entries = [];
-  for(const l of lines) {
-    const clean_l = clean(l);
-    // Table row: | date | lieu | activité |
-    if(l.startsWith("|") && !l.match(/^[|\s:-]+$/)) {
-      const cells = l.split("|").slice(1,-1).map(c=>c.trim()).filter(c=>c);
-      if(cells.length>=2 && !cells[0].toLowerCase().includes("date") && !cells[0].toLowerCase().includes("jour")) {
-        entries.push({date:cells[0], lieu:cells[1], activite:cells[2]||""});
+
+  for (const l of lines) {
+    const t = clean(l).trim();
+    if (!t || /^\|[\s:\-|]+\|$/.test(t)) continue;
+
+    // **date** : activity
+    const bold = t.match(/^\*\*([^*]+)\*\*\s*[:\-·]\s*(.*)/);
+    if (bold) { entries.push({ date: bold[1].trim(), lieu: "", activite: bold[2].trim() }); continue; }
+
+    // Table row | date | lieu | activité
+    if (t.startsWith("|")) {
+      const cells = t.split("|").slice(1, -1).map(c => c.trim()).filter(c => c);
+      if (cells.length >= 2 && !/^(?:date|jour|day)/i.test(cells[0])) {
+        entries.push({ date: cells[0], lieu: cells[1], activite: cells[2] || "" }); continue;
       }
     }
-    // Bullet/text: "30 juin - Marbella - ..."
-    else if(/^\d{1,2}\s*(?:juin|juil|août|sept|oct|nov|déc|jan|fév|mar|avr|mai)/i.test(clean_l.trim())) {
-      const parts = clean_l.split(/\s*-\s*/);
-      entries.push({date:parts[0]?.trim(), lieu:parts[1]?.trim()||"", activite:parts.slice(2).join(" - ").trim()});
-    }
+
+    // "30 juin - Lieu - Activité" or "30 juin : Activité"
+    const datePrefix = t.match(/^(\d{1,2}(?:\s*[-\/]\s*\d{1,2})?\s+(?:jan|fév|mar|avr|mai|juin|juil|août|sept|oct|nov|déc|january|february|march|april|may|june|july|august|september|october|november|december)[a-z]*(?:\s+\d{4})?)\s*[:\-·]\s*(.*)/i);
+    if (datePrefix) { entries.push({ date: datePrefix[1].trim(), lieu: "", activite: datePrefix[2].trim() }); continue; }
+
     // "Jour N : ..."
-    else if(/^(?:Jour|Day)\s*\d+/i.test(clean_l.trim())) {
-      const m = clean_l.match(/^((?:Jour|Day)\s*\d+)[:\s]+(.+)/i);
-      if(m) entries.push({date:m[1].trim(), lieu:"", activite:m[2].trim()});
-    }
+    const jourN = t.match(/^(?:Jour|Day)\s*(\d+)\s*[:\-·]\s*(.*)/i);
+    if (jourN) { entries.push({ date: `Jour ${jourN[1]}`, lieu: "", activite: jourN[2].trim() }); }
   }
 
-  if(entries.length>0) {
-    return (
-      <div style={{position:"relative"}}>
-        {/* Timeline line */}
-        <div style={{position:"absolute",left:"18px",top:"24px",bottom:"24px",width:"2px",background:C.border}}/>
-        {entries.map((e,i)=>(
-          <div key={i} style={{display:"flex",gap:"16px",marginBottom:"16px",position:"relative"}}>
-            {/* Dot */}
-            <div style={{width:"36px",height:"36px",borderRadius:"50%",background:i===0||i===entries.length-1?C.gold:C.card2,border:`2px solid ${i===0||i===entries.length-1?C.gold:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1}}>
-              <span style={{fontSize:"12px"}}>{i===0?"🛫":i===entries.length-1?"🛬":"📍"}</span>
+  if (entries.length === 0) {
+    return <ProseBlock lines={lines} />;
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "absolute", left: "19px", top: "30px", bottom: "30px", width: "2px", background: C.border }} />
+      {entries.map((e, i) => {
+        const isFirst = i === 0, isLast = i === entries.length - 1;
+        const isTransit = /vol|flight|transit|départ|arrivée/i.test(e.activite + e.lieu);
+        return (
+          <div key={i} style={{ display: "flex", gap: "16px", marginBottom: "12px", position: "relative" }}>
+            <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: isFirst || isLast ? C.gold : isTransit ? "#1c3a5c" : C.card2, border: `2px solid ${isFirst || isLast ? C.gold : isTransit ? "#2563eb" : C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, zIndex: 1, marginTop: "4px" }}>
+              <span style={{ fontSize: "14px" }}>{isFirst ? "🛫" : isLast ? "🛬" : isTransit ? "✈️" : "📍"}</span>
             </div>
-            {/* Content */}
-            <div style={{flex:1,background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px 14px"}}>
-              <div style={{fontSize:"11px",fontWeight:"700",color:C.gold,marginBottom:"2px",letterSpacing:"0.06em"}}>{e.date.toUpperCase()}</div>
-              {e.lieu && <div style={{fontSize:"14px",fontWeight:"600",color:C.text,marginBottom:"2px"}}>{e.lieu}</div>}
-              {e.activite && <div style={{fontSize:"12px",color:C.muted,lineHeight:"1.5"}}>{e.activite}</div>}
+            <div style={{ flex: 1, background: C.card2, border: `1px solid ${isFirst || isLast ? C.gold : C.border}`, borderRadius: "12px", padding: "12px 16px" }}>
+              <div style={{ fontSize: "11px", fontWeight: "800", color: C.gold, letterSpacing: "0.06em", marginBottom: "3px" }}>{e.date.toUpperCase()}</div>
+              {e.lieu && <div style={{ fontSize: "14px", fontWeight: "700", color: C.text, marginBottom: "2px" }}>{e.lieu}</div>}
+              {e.activite && <div style={{ fontSize: "13px", color: C.muted, lineHeight: "1.5" }} dangerouslySetInnerHTML={{ __html: renderInline(e.activite) }} />}
             </div>
           </div>
-        ))}
-      </div>
-    );
-  }
-  // Fallback to cleaned text
-  return (
-    <div>
-      {lines.map((l,i)=>{
-        const cl = clean(l.replace(/^[-•]\s*/,"").trim());
-        if(!cl||/^\|[\s:-]+\|/.test(cl)) return null;
-        return <p key={i} style={{margin:"0 0 8px",fontSize:"13px",color:l.startsWith("|")||l.match(/^\d/)? C.text:C.muted,lineHeight:"1.6"}}>{cl}</p>;
+        );
       })}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// REVOLUT / FIDELITE DISPLAY
+// FIDELITE / RECOMMANDATION — clean prose cards
 // ═══════════════════════════════════════════════════════════════════
 
-function FideliteDisplay({lines}) {
+function FideliteDisplay({ lines }) {
   const src = clean(lines.join("\n"));
-  const items = [];
-  for(const l of lines) {
-    const cl = clean(l.replace(/^[-•✅]\s*/,"").trim());
-    if(cl && !cl.startsWith("|") && cl.length>5) items.push(cl);
-  }
+  const cleanLines = src.split("\n").filter(l => l.trim() && l.trim() !== "|" && !/^\|[\s:-]+\|/.test(l.trim())).map(l => l.replace(/^[-•✅]\s*/, "").trim());
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-      {items.map((item,i)=>(
-        <div key={i} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px 16px",fontSize:"13px",color:C.text,lineHeight:"1.6"}}>
-          {item.includes("Lounge")?<span style={{color:C.gold}}>✈ Lounge - </span>:
-           item.includes("miles")||item.includes("Miles")?<span style={{color:C.gold}}>⭐ Miles - </span>:
-           item.includes("upgrade")||item.includes("Upgrade")?<span style={{color:C.gold}}>💺 Upgrade - </span>:
-           <span style={{color:C.gold}}>💳 </span>}
-          <span dangerouslySetInnerHTML={{__html:item.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}/>
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {cleanLines.filter(l => l.length > 5 && !l.startsWith("|")).map((item, i) => (
+        <div key={i} style={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: "10px", padding: "14px 16px", fontSize: "13px", color: C.muted, lineHeight: "1.7" }}>
+          {/lounge/i.test(item) ? <span style={{ color: C.gold, marginRight: "6px" }}>✈</span> : /mile|award/i.test(item) ? <span style={{ color: C.gold, marginRight: "6px" }}>⭐</span> : /upgrade/i.test(item) ? <span style={{ color: C.gold, marginRight: "6px" }}>💺</span> : <span style={{ color: C.gold, marginRight: "6px" }}>💳</span>}
+          <span dangerouslySetInnerHTML={{ __html: renderInline(item) }} />
         </div>
       ))}
-      {items.length===0 && <MDInline text={lines.join("\n")}/>}
     </div>
   );
 }
@@ -848,58 +796,55 @@ function FideliteDisplay({lines}) {
 // RESULTS VIEW
 // ═══════════════════════════════════════════════════════════════════
 
-function ResultsView({text}) {
+function ResultsView({ text }) {
   const [activeClass, setActiveClass] = useState("mixte");
   const sections = parseSections(text);
-  if(!sections.length) return <MDInline text={text}/>;
+  if (!sections.length) return <ProseBlock lines={text.split("\n")} />;
 
-  // Extract prices for class tabs
-  const totauxSec = sections.find(s=>/total|coût/i.test(s.title));
-  const tt = totauxSec ? totauxSec.lines.join(" ") : "";
+  // Extract prices for tabs from Totaux section
+  const tt = (sections.find(s => /total|coût/i.test(s.title))?.lines || []).join(" ");
   const prices = {
-    business: tt.match(/business[^0-9]*(\d[\d\s]+)/i)?.[1]?.trim() || null,
-    mixte: tt.match(/mix[^0-9]*(\d[\d\s]+)/i)?.[1]?.trim() || null,
-    eco: tt.match(/éco[^0-9]*(\d[\d\s]+)/i)?.[1]?.trim() || null,
+    business: tt.match(/business[^\d]*(\d[\d\s]{2,})/i)?.[1]?.trim() || null,
+    mixte: tt.match(/mixte[^\d]*(\d[\d\s]{2,})/i)?.[1]?.trim() || tt.match(/mix[^\d]*(\d[\d\s]{2,})/i)?.[1]?.trim() || null,
+    eco: tt.match(/[eé]co[^\d]*(\d[\d\s]{2,})/i)?.[1]?.trim() || null,
   };
 
   return (
     <div>
-      {sections.map((sec,i)=>{
+      {sections.map((sec, i) => {
         const isRecap = /récap/i.test(sec.title);
-        const isVol = /^✈|^vols?/i.test(sec.title.split(" ").slice(-1)[0]) && !/revolut|astuce/i.test(sec.title);
+        const isVol = /vols?/i.test(sec.title) && !/revolut|astuce|fidél/i.test(sec.title);
         const isHotel = /héberg/i.test(sec.title);
         const isTotal = /total|coût/i.test(sec.title);
         const isMeteo = /météo|meteo/i.test(sec.title);
         const isCalendrier = /calendrier|planning/i.test(sec.title);
         const isRevolut = /revolut|astuce|fidél/i.test(sec.title);
-        const isReco = /recommand/i.test(sec.title);
-
-        // ALL closed except recap
-        const defOpen = isRecap;
 
         const hotelBlocks = isHotel ? parseHotelBlocks(sec.lines) : [];
 
         return (
-          <AccCard key={i} title={sec.title} defaultOpen={defOpen} accent={isTotal}>
+          <AccCard key={i} title={sec.title} defaultOpen={isRecap} accent={isTotal}>
             {isRecap ? (
-              <RecapDisplay lines={sec.lines} activeClass={activeClass} prices={prices}/>
+              <RecapDisplay lines={sec.lines} activeClass={activeClass} prices={prices} />
             ) : isVol ? (
-              <FlightDisplay lines={sec.lines} activeClass={activeClass} setActiveClass={setActiveClass} prices={prices}/>
-            ) : isHotel && hotelBlocks.length>0 ? (
+              <FlightDisplay lines={sec.lines} activeClass={activeClass} setActiveClass={setActiveClass} prices={prices} />
+            ) : isHotel && hotelBlocks.length > 0 ? (
               <div>
-                {(()=>{const pre=[];for(const l of sec.lines){if(/^### /.test(l)) break;pre.push(l);}return pre.length?<MDInline text={pre.join("\n")} activeClass={activeClass}/>:null;})()}
-                {hotelBlocks.map((b,j)=>b.isHeader ? <DestinationHeader key={j} name={b.name}/> : <HotelCard key={j} name={b.name} lines={b.lines}/>)}
+                {hotelBlocks.map((b, j) => b.isHeader
+                  ? <DestinationHeader key={j} name={b.name} />
+                  : <HotelCard key={j} name={b.name} lines={b.lines} />
+                )}
               </div>
             ) : isTotal ? (
-              <TotauxDisplay lines={sec.lines} activeClass={activeClass}/>
+              <TotauxDisplay lines={sec.lines} activeClass={activeClass} />
             ) : isMeteo ? (
-              <MeteoDisplay lines={sec.lines}/>
+              <MeteoDisplay lines={sec.lines} />
             ) : isCalendrier ? (
-              <CalendrierDisplay lines={sec.lines}/>
+              <CalendrierDisplay lines={sec.lines} />
             ) : isRevolut ? (
-              <FideliteDisplay lines={sec.lines}/>
+              <FideliteDisplay lines={sec.lines} />
             ) : (
-              <MDInline text={sec.lines.join("\n")} activeClass={activeClass}/>
+              <ProseBlock lines={sec.lines} />
             )}
           </AccCard>
         );
@@ -909,7 +854,6 @@ function ResultsView({text}) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════════
 // DATE FLEX CELL — date input + exact/±jours toggle + slider
 // ═══════════════════════════════════════════════════════════════════
 
