@@ -49,10 +49,10 @@ function RecapDisplay({lines,t}){
   const data=isKV?rows.slice(1):rows.slice(1); // skip header
   if(!data.length)return null;
   // Extract key info
-  let nights=0,dest="",voy="1";
+  let nights=0,voy="1";
   for(const r of data){const k=(r[0]||"").toLowerCase();const v=r[1]||"";
-    if(/dur/i.test(k)){const m=v.match(/(\d+)\s*nuit/g);if(m)m.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});}
-    if(/dest/i.test(k))dest=v;
+    // Search for nights in ANY field
+    const nm=v.match(/(\d+)\s*nuit/g);if(nm)nm.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});
     if(/voyag/i.test(k)){const m=v.match(/(\d+)/);if(m)voy=m[1];}
   }
   return(<div>
@@ -87,11 +87,14 @@ function FlightDisplay({lines,t}){
       return(<div key={vi} style={{marginBottom:16}}>
         {vol.title&&<div style={{padding:"12px 18px",background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:"12px 12px 0 0"}}><span style={{fontSize:12,fontWeight:800,color:t.gold,letterSpacing:"0.06em"}}>{vol.title}</span></div>}
         {filtered.map((row,ri)=>{
-          // Columns: Scénario | Compagnie | Routing | Départ/Arrivée | Durée | Escales | Prix CHF | Lien
+          // Dynamic columns: 7 cols = Scénario|Compagnie|Routing|Durée|Escales|Prix|Lien
+          //                  8 cols = Scénario|Compagnie|Routing|Départ/Arrivée|Durée|Escales|Prix|Lien
+          const n=row.length;const has8=n>=8;
           const scenario=row[0]||"";const compagnie=row[1]||"";const routing=row[2]||"";
-          const depArr=row[3]||"";const duree=row[4]||"";const escales=row[5]||"";
-          const prix=row[6]||"0";
-          const linkCell=row[7]||"";const linkM=linkCell.match(/\[([^\]]+)\]\(([^)]+)\)/);
+          const depArr=has8?(row[3]||""):"";
+          const duree=row[has8?4:3]||"";const escales=row[has8?5:4]||"";
+          const prix=row[has8?6:5]||"0";
+          const linkCell=row[has8?7:6]||"";const linkM=linkCell.match(/\[([^\]]+)\]\(([^)]+)\)/);
           const airports=routing.split(/[-→>]/).map(s=>s.trim()).filter(Boolean);
           const esc=parseInt(escales)||0;
 
@@ -165,7 +168,7 @@ function HotelCard({name,lines,t}){
     <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{stars>0&&<span style={{color:t.gold,fontSize:12}}>{"★".repeat(stars)}</span>}<span style={{fontSize:15,fontWeight:700,color:t.text}}>{name}</span></div><span style={{color:t.muted,fontSize:16}}>{open?"−":"+"}</span></button>
     {open&&<>
       <div style={{height:200,overflow:"hidden",position:"relative"}}>
-        {!imgErr?<img src={heroImg} alt={name} crossOrigin="anonymous" referrerPolicy="no-referrer" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+        {!imgErr?<img src={heroImg} alt={name} referrerPolicy="no-referrer" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c,#0f3460)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div>Photos sur le site officiel</div></div>}
         {imgs.length>1&&<div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff"}}>{imgs.length} photos</div>}
       </div>
@@ -249,18 +252,29 @@ function MeteoDisplay({lines,t}){
 // CALENDRIER — **date**: activity  OR  **date:** activity
 // ═══════════════════════════════════════════════════════════════
 function CalendrierDisplay({lines,t}){
-  const entries=[];for(const l of lines){const s=l.trim();if(!s||/^\|/.test(s))continue;
-    // Match: **anything**: rest  OR  **anything** rest (with optional colon/dash)
-    const m=s.match(/^\*\*([^*]+)\*\*\s*[:\-·]?\s*(.*)/);
-    if(m){const date=m[1].replace(/[:\-·]\s*$/,"").trim();const act=m[2]?.trim()||"";if(date.length>2)entries.push({date,act});}}
+  const entries=[];let currentGroup="";
+  for(const l of lines){const s=l.trim();if(!s||/^\|/.test(s))continue;
+    // Section header: **Malaga (2-10 juillet)** (bold without colon after)
+    const hdr=s.match(/^\*\*([^*]+)\*\*\s*$/);
+    if(hdr){currentGroup=hdr[1].trim();entries.push({date:currentGroup,act:"",isHeader:true});continue;}
+    // Bold date: **date**: activity  OR  **date** activity
+    const bold=s.match(/^\*\*([^*]+)\*\*\s*[:\-·]?\s*(.*)/);
+    if(bold){const date=bold[1].replace(/[:\-·]\s*$/,"").trim();const act=bold[2]?.trim()||"";if(date.length>2)entries.push({date,act});continue;}
+    // Bullet: - date : activity (split on : only, not -)
+    const bullet=s.match(/^[-•]\s*(.+?)\s*:\s*(.*)/);
+    if(bullet&&bullet[1].length>2){entries.push({date:bullet[1].trim(),act:bullet[2].trim()});continue;}
+  }
   if(!entries.length)return<div style={{color:t.muted,fontSize:13}}>Calendrier non disponible</div>;
   const[openI,setOpenI]=useState(null);const colors=[t.gold,"#e05555",t.blue,"#9b59b6",t.green,"#e67e22"];
   return(<div style={{position:"relative"}}><div style={{position:"absolute",left:19,top:30,bottom:30,width:2,background:t.border}}/>
-    {entries.map((e,i)=>{const isEnd=i===0||i===entries.length-1;const c=colors[i%colors.length];const isO=openI===i;
-    return<div key={i} style={{display:"flex",gap:12,marginBottom:12,position:"relative"}}>
-      <div style={{width:40,height:40,borderRadius:"50%",background:isEnd?t.gold:t.card2,border:`2px solid ${isEnd?t.gold:c}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1,marginTop:4}}><span style={{fontSize:12,fontWeight:800,color:isEnd?"#0a0a0a":c}}>{i+1}</span></div>
+    {entries.map((e,i)=>{
+      // Section header
+      if(e.isHeader)return<div key={i} style={{display:"flex",gap:12,marginBottom:12,position:"relative"}}><div style={{width:40,height:40,borderRadius:"50%",background:t.gold,border:`2px solid ${t.gold}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1,marginTop:4}}><span style={{fontSize:12,fontWeight:800,color:"#0a0a0a"}}>★</span></div><div style={{flex:1,padding:"12px 16px",background:t.goldBg2,border:`1px solid ${t.gold}`,borderRadius:12}}><div style={{fontSize:12,fontWeight:800,color:t.gold,letterSpacing:"0.06em"}}>{e.date.toUpperCase()}</div></div></div>;
+      const c=colors[i%colors.length];const isO=openI===i;
+    return<div key={i} style={{display:"flex",gap:12,marginBottom:8,position:"relative"}}>
+      <div style={{width:40,height:40,borderRadius:"50%",background:t.card2,border:`2px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1,marginTop:4}}><span style={{fontSize:12,fontWeight:800,color:c}}>{i+1}</span></div>
       <div style={{flex:1}}>
-        <button onClick={()=>setOpenI(isO?null:i)} style={{width:"100%",textAlign:"left",background:t.card2,border:`1px solid ${isEnd?t.gold:t.border}`,borderRadius:isO?"12px 12px 0 0":"12px",padding:"12px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <button onClick={()=>setOpenI(isO?null:i)} style={{width:"100%",textAlign:"left",background:t.card2,border:`1px solid ${t.border}`,borderRadius:isO?"12px 12px 0 0":"12px",padding:"12px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div style={{flex:1}}><div style={{fontSize:11,fontWeight:800,color:c,letterSpacing:"0.06em"}}>{e.date.toUpperCase()}</div>{e.act&&<div style={{fontSize:13,color:t.muted,lineHeight:1.5,marginTop:3}} dangerouslySetInnerHTML={{__html:inline(e.act)}}/>}</div>
           <span style={{color:t.muted,fontSize:12,marginLeft:8,flexShrink:0}}>{isO?"▲":"▼"}</span>
         </button>
