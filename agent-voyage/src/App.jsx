@@ -375,7 +375,6 @@ export default function App(){
         {/* Debug: raw text */}
         <button onClick={()=>setShowRaw(!showRaw)} style={{width:"100%",padding:12,marginBottom:12,background:showRaw?t.goldBg2:"transparent",border:`1px solid ${showRaw?t.gold:t.border}`,borderRadius:10,cursor:"pointer",color:showRaw?t.gold:t.muted,fontSize:12,fontWeight:700,fontFamily:FN,textAlign:"center"}}>📋 {showRaw?"MASQUER":"AFFICHER"} LE TEXTE BRUT</button>
         {showRaw&&<div style={{marginBottom:16,background:t.card,border:`1px solid ${t.border}`,borderRadius:12,padding:16}}><div style={{fontSize:11,fontWeight:700,color:t.gold,marginBottom:8,fontFamily:FN}}>Copie tout et envoie-le sur Claude</div><textarea readOnly value={result} style={{width:"100%",minHeight:400,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:12,fontFamily:MN,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
-        </div>
         <ResultsView text={result} t={t} mob={mob}/>
       </div>}
 
