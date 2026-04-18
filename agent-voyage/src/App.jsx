@@ -25,10 +25,12 @@ function clean(t){if(!t)return"";return t.replace(/[—–]/g," - ");}
 function renderInline(s){return(s||"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,`<a href="$2" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">$1 ↗</a>`);}
 function parseSections(text){const lines=clean(text).split("\n");const secs=[];let cur=null;for(const l of lines){const h2=l.match(/^## (.+)/);if(h2){if(cur)secs.push(cur);cur={title:h2[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);}if(cur)secs.push(cur);return secs;}
 function titleParts(t){const m=t.match(/^([\u{1F300}-\u{1FFFF}][\uFE0F\u200D]*)+\s*/u);return m?{icon:m[0].trim(),label:t.slice(m[0].length).trim()}:{icon:"",label:t};}
-// Preprocess lines: join broken table rows (API sometimes puts newlines inside cells)
-function fixTableLines(lines){const out=[];for(let i=0;i<lines.length;i++){const l=lines[i];if(l.trim().startsWith("|")){let row=l;while(i+1<lines.length&&!lines[i+1].trim().startsWith("|")&&!lines[i+1].trim().startsWith("#")&&!lines[i+1].trim().startsWith("*")&&lines[i+1].trim()!==""){i++;row=row.trimEnd()+" "+lines[i].trim();}out.push(row);}else out.push(l);}return out;}
+// Preprocess: join broken table rows more carefully
+function fixTableLines(lines){const out=[];for(let i=0;i<lines.length;i++){const l=lines[i];const s=l.trim();if(s.startsWith("|")&&s.endsWith("|")){out.push(l);}else if(s.startsWith("|")&&!s.endsWith("|")){let row=l;while(i+1<lines.length){const next=lines[i+1].trim();if(!next||next.startsWith("#")||next.startsWith("*")||(next.startsWith("|")&&next.endsWith("|")))break;i++;row=row.trimEnd()+" "+next;if(row.trim().endsWith("|"))break;}out.push(row);}else out.push(l);}return out;}
 function parseTableRows(lines){const fixed=fixTableLines(lines);const rows=[];for(const l of fixed){const s=l.trim();if(s.startsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim().replace(/\s+/g," "));if(cells.length>=2)rows.push(cells);}}return rows;}
 function parseKV(lines){const fixed=fixTableLines(lines);const d={};for(const l of fixed){const s=l.trim();if(s.startsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim().replace(/\s+/g," "));if(cells.length>=2&&cells[0])d[cells[0]]=cells[1];}}return d;}
+// Extract IMAGES: urls from lines
+function extractImgUrls(lines){for(const l of lines){const m=l.match(/^IMAGES:\s*(.+)/i);if(m)return m[1].split("|").map(u=>u.trim()).filter(u=>u.startsWith("http"));}return [];}
 
 // ── UI PRIMITIVES ──
 function Sec({icon,title,children,t,defaultOpen=false,accent=false,mob}){const[o,setO]=useState(defaultOpen);const{icon:ti,label}=typeof title==="string"?titleParts(title):{icon:"",label:title};return(<div style={{background:t.card,border:`1px solid ${accent?t.gold:t.border}`,borderRadius:14,marginBottom:10,overflow:"hidden"}}><button onClick={()=>setO(x=>!x)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"none",border:"none",cursor:"pointer",borderBottom:o?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:10}}>{(icon||ti)&&<span style={{fontSize:16}}>{icon||ti}</span>}<span style={{fontSize:13,fontWeight:700,color:accent?t.gold:t.text,fontFamily:FN}}>{label}</span></div><span style={{color:t.muted,fontSize:18,fontWeight:300}}>{o?"−":"+"}</span></button>{o&&<div style={{padding:"14px 20px"}}>{children}</div>}</div>);}
@@ -65,8 +67,13 @@ function FlightDisplay({lines,t,mob}){
       return(<div key={vi} style={{marginBottom:16}}>
         {vol.title&&<div style={{padding:"12px 18px",background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:"12px 12px 0 0",borderBottom:"none"}}><span style={{fontSize:12,fontWeight:800,color:t.gold,letterSpacing:"0.06em",fontFamily:FN}}>{vol.title}</span></div>}
         {filtered.map((row,ri)=>{
-          const[scenario,compagnie,routing,duree,escales,prix,...rest]=row;
-          const link=parseLink(rest.join("|"));
+          const[scenario,compagnie,routing,duree,escales,...rest]=row;
+          // Find price: scan remaining cells for a number (skip link cells with [])
+          let prix="0";let linkCell="";
+          for(const cell of rest){if(/\[/.test(cell)){linkCell=cell;}else if(/\d/.test(cell)&&!/^[\|\s:\-]+$/.test(cell)){prix=cell;}}
+          // Also check if escales looks like a price (API sometimes shifts columns)
+          if(prix==="0"&&/\d{2,}/.test(escales||"")){prix=escales;}
+          const link=parseLink(linkCell||rest.join("|"));
           const stops=routing||"";const airports=stops.split(/[-→>]/).map(s=>s.trim()).filter(Boolean);
           return(<div key={ri} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:vol.title?ri===filtered.length-1?"0 0 12px 12px":"0":"12px",padding:mob?"16px":"20px 24px",borderTop:vol.title||ri>0?"none":undefined,marginBottom:ri<filtered.length-1?0:0}}>
             {/* Top: Airline + Price */}
@@ -139,8 +146,8 @@ function HotelCardV2({name,lines,t,mob}){
   const pT=prixTotal.match(/(\d[\d'\s]*)/)?.[1]?.replace(/['\s]/g,"")||"";
   const petitDej=get("petit");const piscine=get("piscine");const spa=get("spa");const vue=get("vue");
   const lien=get("lien")||"";const linkM=lien.match(/\[([^\]]+)\]\(([^)]+)\)/);
-  // Prose
-  const prose=lines.filter(l=>{const s=l.trim();return s&&!/^\|/.test(s)&&!/^#{1,4}/.test(s);}).slice(0,3);
+  // Prose - filter out IMAGES: lines and table rows
+  const prose=lines.filter(l=>{const s=l.trim();return s&&!/^\|/.test(s)&&!/^#{1,4}/.test(s)&&!/^IMAGES:/i.test(s)&&!/^https?:\/\//i.test(s);}).slice(0,3);
   // Chips - no emojis
   const chips=[];
   if(equipements)equipements.split(",").forEach(s=>{const v=s.trim();if(v.length>1)chips.push(v);});
@@ -149,9 +156,10 @@ function HotelCardV2({name,lines,t,mob}){
   if(petitDej&&/gratuit|inclus|oui/i.test(petitDej))chips.push("Petit-déj inclus");
   if(vue)chips.push(vue.split(",")[0].trim().substring(0,30));
   const rN=parseFloat(noteNum||"0");const rC=rN>=9?"#16a34a":rN>=8?"#1d8348":"#2e7d32";
-  // Image: Unsplash fallback based on hotel name
-  const imgQuery=encodeURIComponent(name.replace(/[^\w\s]/g,"").trim());
-  const imgUrl=`https://source.unsplash.com/800x400/?hotel,${imgQuery}`;
+  // Images: first try API IMAGES: urls, then Unsplash fallback
+  const apiImgs=extractImgUrls(lines);
+  const fallbackImg=`https://source.unsplash.com/800x400/?luxury+hotel+${encodeURIComponent(name.split(/[,()]/)[0].trim())}`;
+  const heroImg=apiImgs.length>0?apiImgs[0]:fallbackImg;
   const[imgErr,setImgErr]=useState(false);
 
   return(<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:14,marginBottom:14,overflow:"hidden"}}>
@@ -162,7 +170,7 @@ function HotelCardV2({name,lines,t,mob}){
     {open&&<>
       {/* Hotel image */}
       <div style={{height:180,overflow:"hidden"}}>
-        {!imgErr?<img src={imgUrl} alt={name} onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+        {!imgErr?<img src={heroImg} alt={name} onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c 0%,#0f3460 50%,#1a1f3c 100%)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div><span style={{fontSize:32,display:"block",marginBottom:6}}>🏨</span>Consulter le site pour les photos</div></div>}
       </div>
       <div style={{padding:"16px 20px"}}>
@@ -206,13 +214,14 @@ return(<div>
 
 function MeteoDisplay({lines,t,mob}){
   const[destIdx,setDestIdx]=useState(0);
-  const dests=[];let cur=null;
-  for(const l of lines){const h=l.match(/^###\s+(.+)/);if(h){if(cur)dests.push(cur);cur={name:h[1].trim(),lines:[]};}else{if(!cur)cur={name:"",lines:[]};cur.lines.push(l);}}
-  if(cur)dests.push(cur);
-  // Also try splitting by **City (dates)** bold headers if no ### found
-  if(dests.length<=1&&dests[0]){const all=dests[0].lines;const newDests=[];let cd=null;
-  for(const l of all){const bm=l.match(/^\*\*([A-ZÀ-Ÿ][^*]+)\*\*\s*[:\-]/);if(bm){if(cd&&cd.lines.length)newDests.push(cd);cd={name:bm[1].trim(),lines:[l]};}else if(cd)cd.lines.push(l);else if(!cd){cd={name:"",lines:[l]};}}
-  if(cd&&cd.lines.length)newDests.push(cd);if(newDests.length>1){dests.length=0;dests.push(...newDests);}}
+  const rawDests=[];let cur=null;
+  for(const l of lines){const h=l.match(/^###\s+(.+)/);if(h){if(cur)rawDests.push(cur);cur={name:h[1].trim(),lines:[]};}else{if(!cur)cur={name:"",lines:[]};cur.lines.push(l);}}
+  if(cur)rawDests.push(cur);
+  // Also try **City (dates):** bold headers
+  if(rawDests.length<=1&&rawDests[0]){const all=rawDests[0].lines;const nd=[];let cd=null;for(const l of all){const bm=l.match(/^\*\*([A-ZÀ-Ÿ][^*]+)\*\*\s*[:\-]/);if(bm){if(cd&&cd.lines.length)nd.push(cd);cd={name:bm[1].trim(),lines:[l]};}else if(cd)cd.lines.push(l);else if(!cd){cd={name:"",lines:[l]};}}if(cd&&cd.lines.length)nd.push(cd);if(nd.length>1){rawDests.length=0;rawDests.push(...nd);}}
+  // Filter out empty-name dests if there are named ones
+  const dests=rawDests.filter(d=>d.name||rawDests.length===1);
+  if(!dests.length&&rawDests.length)dests.push(rawDests[0]);
 
   const hasTabs=dests.length>1;const active=dests[destIdx]||dests[0]||{lines:[]};
   const src=active.lines.join("\n");
@@ -234,8 +243,11 @@ function MeteoDisplay({lines,t,mob}){
 }
 
 function CalendrierDisplay({lines,t,mob}){
-  const entries=[];for(const l of lines){const s=clean(l).trim();if(!s)continue;const bold=s.match(/^\*\*([^*]+)\*\*\s*[:\-·]\s*(.*)/);if(bold)entries.push({date:bold[1].trim(),act:bold[2].trim()});}
-  if(!entries.length)return null;
+  const entries=[];for(const l of lines){const s=clean(l).trim();if(!s||/^\|/.test(s))continue;
+    // **date** : act  OR  **date :** act  OR  **date** act
+    const bold=s.match(/^\*\*([^*]+)\*\*\s*[:\-·]?\s*(.*)/);
+    if(bold&&bold[1].trim().length>2){const date=bold[1].replace(/\s*[:\-·]\s*$/,"").trim();const act=bold[2]?.trim()||"";if(date)entries.push({date,act});}}
+  if(!entries.length)return<div style={{color:t.muted,fontSize:13,padding:10}}>Calendrier en cours de génération...</div>;
   const[openIdx,setOpenIdx]=useState(null);
   const colors=[t.gold,"#e05555",t.blue,"#9b59b6",t.green,"#e67e22"];
 
