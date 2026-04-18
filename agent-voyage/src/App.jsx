@@ -275,8 +275,14 @@ function FideliteDisplay({lines,t}){const items=lines.filter(l=>l.trim()&&!/^#{1
 // ═══════════════════════════════════════════════════════════════
 // RESULTS VIEW
 // ═══════════════════════════════════════════════════════════════
-function ResultsView({text,t,mob}){const sections=parseSections(text);if(!sections.length)return<p style={{color:t.muted}}>{text}</p>;
-return(<div>{sections.map((sec,i)=>{const ti=sec.title.toLowerCase();const isR=/récap/i.test(ti);const isV=/vols?\b/i.test(ti)&&!/revolut|astuce|fidél/i.test(ti);const isH=/héberg/i.test(ti);const isT=/total|coût/i.test(ti);const isM=/météo|meteo/i.test(ti);const isC=/calendrier|planning/i.test(ti);const isRe=/recommand/i.test(ti);const isF=/revolut|astuce|fidél/i.test(ti);
+function ResultsView({text,t,mob}){const[showSrc,setShowSrc]=useState(false);const sections=parseSections(text);if(!sections.length)return<p style={{color:t.muted}}>{text}</p>;
+return(<div>
+{/* Raw text - always available */}
+<div style={{marginBottom:14,background:t.card,border:`1px solid ${t.gold}`,borderRadius:12,overflow:"hidden"}}>
+<button onClick={()=>setShowSrc(!showSrc)} style={{width:"100%",padding:"12px 16px",background:t.goldBg2,border:"none",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:700,color:t.gold,fontFamily:FN}}>📋 Texte brut de l'API</span><span style={{color:t.gold,fontSize:14}}>{showSrc?"▲":"▼"}</span></button>
+{showSrc&&<div style={{padding:14}}><div style={{fontSize:11,color:t.muted,marginBottom:8}}>Clique dans le champ → tout est sélectionné → copie et colle sur Claude</div><textarea readOnly value={text} style={{width:"100%",minHeight:400,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:11,fontFamily:MN,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
+</div>
+{sections.map((sec,i)=>{const ti=sec.title.toLowerCase();const isR=/récap/i.test(ti);const isV=/vols?\b/i.test(ti)&&!/revolut|astuce|fidél/i.test(ti);const isH=/héberg/i.test(ti);const isT=/total|coût/i.test(ti);const isM=/météo|meteo/i.test(ti);const isC=/calendrier|planning/i.test(ti);const isRe=/recommand/i.test(ti);const isF=/revolut|astuce|fidél/i.test(ti);
 return(<Sec key={i} title={sec.title} t={t} mob={mob} defaultOpen={isR||isV||isH} accent={isT}>{isR?<RecapDisplay lines={sec.lines} t={t} mob={mob}/>:isV?<FlightDisplay lines={sec.lines} t={t} mob={mob}/>:isH?<HebergementDisplay lines={sec.lines} t={t} mob={mob}/>:isT?<TotauxDisplay lines={sec.lines} t={t} mob={mob}/>:isM?<MeteoDisplay lines={sec.lines} t={t} mob={mob}/>:isC?<CalendrierDisplay lines={sec.lines} t={t} mob={mob}/>:isRe?<RecoDisplay lines={sec.lines} t={t}/>:isF?<FideliteDisplay lines={sec.lines} t={t}/>:<div>{sec.lines.filter(l=>l.trim()).map((l,j)=><p key={j} style={{margin:"0 0 6px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:renderInline(l)}}/>)}</div>}</Sec>);})}</div>);}
 
 // ═══════════════════════════════════════════════════════════════
@@ -364,9 +370,11 @@ export default function App(){
       {phase==="done"&&result&&<div style={{marginTop:16}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
           <div><span style={{fontSize:11,fontWeight:800,letterSpacing:"0.14em",color:t.text,fontFamily:FN}}>RÉSULTATS</span><span style={{fontSize:10,color:t.muted,marginLeft:12}}>{new Date().toLocaleDateString("fr-CH",{day:"numeric",month:"long",year:"numeric"})}</span></div>
-          <div style={{display:"flex",gap:8}}><button onClick={()=>setShowRaw(!showRaw)} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:"transparent",border:`1px solid ${showRaw?t.gold:t.border}`,borderRadius:6,cursor:"pointer",color:showRaw?t.gold:t.muted,fontFamily:FN}}>📋 BRUT</button><button onClick={reset} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:t.gold,border:"none",borderRadius:6,cursor:"pointer",color:"#0a0a0a",fontFamily:FN}}>NOUVELLE RECHERCHE</button></div>
+          <button onClick={reset} style={{fontSize:10,fontWeight:700,padding:"6px 14px",background:t.gold,border:"none",borderRadius:6,cursor:"pointer",color:"#0a0a0a",fontFamily:FN}}>NOUVELLE RECHERCHE</button>
         </div>
-        {showRaw&&<div style={{marginBottom:16,background:t.card,border:`1px solid ${t.border}`,borderRadius:12,padding:16}}><div style={{fontSize:11,fontWeight:700,color:t.gold,marginBottom:8,fontFamily:FN}}>Copie tout et envoie-le sur Claude</div><textarea readOnly value={result} style={{width:"100%",minHeight:300,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:12,fontFamily:MN,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
+        {/* Debug: raw text */}
+        <button onClick={()=>setShowRaw(!showRaw)} style={{width:"100%",padding:12,marginBottom:12,background:showRaw?t.goldBg2:"transparent",border:`1px solid ${showRaw?t.gold:t.border}`,borderRadius:10,cursor:"pointer",color:showRaw?t.gold:t.muted,fontSize:12,fontWeight:700,fontFamily:FN,textAlign:"center"}}>📋 {showRaw?"MASQUER":"AFFICHER"} LE TEXTE BRUT</button>
+        {showRaw&&<div style={{marginBottom:16,background:t.card,border:`1px solid ${t.border}`,borderRadius:12,padding:16}}><div style={{fontSize:11,fontWeight:700,color:t.gold,marginBottom:8,fontFamily:FN}}>Copie tout et envoie-le sur Claude</div><textarea readOnly value={result} style={{width:"100%",minHeight:400,background:t.input,border:`1px solid ${t.border}`,borderRadius:8,color:t.text,fontSize:12,fontFamily:MN,padding:12,boxSizing:"border-box",resize:"vertical"}} onClick={e=>e.target.select()}/></div>}
         </div>
         <ResultsView text={result} t={t} mob={mob}/>
       </div>}
