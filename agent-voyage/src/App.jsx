@@ -854,6 +854,47 @@ function ResultsView({ text }) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════
+// FORM UI COMPONENTS (Lbl, Chip, LoyaltySelector)
+// ═══════════════════════════════════════════════════════════════════
+
+function Lbl({children, s={}}) {
+  return <div style={{fontSize:"10px",fontWeight:"600",letterSpacing:"0.1em",color:C.muted,marginBottom:"6px",textTransform:"uppercase",fontFamily:C.sans,...s}}>{children}</div>;
+}
+
+function Chip({label, selected, onClick}) {
+  return <button type="button" onClick={onClick} style={{padding:"7px 15px",borderRadius:"20px",border:`1px solid ${selected?C.gold:C.border}`,background:selected?"rgba(201,169,110,0.15)":"transparent",color:selected?C.gold:C.muted,fontSize:"12px",cursor:"pointer",fontFamily:C.sans,whiteSpace:"nowrap"}}>{label}</button>;
+}
+
+function LoyaltySelector({selected,onChange,points,onPoints}) {
+  return (
+    <div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:"7px",marginBottom:selected.length>0?"14px":"0"}}>
+        {LOYALTY.map(p=>{
+          const on = selected.includes(p.id);
+          return <button key={p.id} onClick={()=>onChange(on?selected.filter(x=>x!==p.id):[...selected,p.id])} style={{padding:"6px 13px",borderRadius:"20px",border:`1px solid ${on?C.gold:C.border}`,background:on?"rgba(201,169,110,0.12)":"transparent",color:on?C.gold:C.muted,fontSize:"11px",cursor:"pointer",fontFamily:C.sans}}>{p.short}</button>;
+        })}
+      </div>
+      {selected.length>0 && (
+        <div style={{background:C.card2,borderRadius:"10px",padding:"14px 16px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+            <Lbl s={{marginBottom:0}}>Points disponibles</Lbl>
+            <span style={{fontSize:"14px",fontWeight:"800",color:C.gold}}>{points>=100000?">100 000":points.toLocaleString("fr-CH")} pts</span>
+          </div>
+          <input type="range" min="0" max="10" step="1"
+            value={Math.max(0,POINTS_MARKS.findIndex(v=>v===points))}
+            onChange={e=>onPoints(POINTS_MARKS[+e.target.value]||0)}
+            style={{width:"100%",accentColor:C.gold,cursor:"pointer"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",color:C.muted,marginTop:"5px"}}>
+            {["0","5k","10k","20k","30k","50k",">100k"].map(l=><span key={l}>{l}</span>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // DATE FLEX CELL — date input + exact/±jours toggle + slider
 // ═══════════════════════════════════════════════════════════════════
 
