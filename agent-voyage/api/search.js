@@ -121,8 +121,28 @@ Pour chaque leg de vol, présenter 3 scénarios en tableau :
 | 🪑 Full Économie | ... | ... | ... | ... | ... | [Kayak](url) |
 
 ## 🏨 Hébergements
-Par destination, minimum 2 options adaptées à l'ambiance et activités demandées :
-| Hôtel | ★ | Note | Zone | Points forts | Prix/nuit CHF | Total CHF | Lien |
+Par destination, minimum 2 options adaptées à l'ambiance et activités demandées.
+Pour chaque hôtel, présenter dans cet ordre exact :
+
+### [Nom exact de l'hôtel]
+IMAGES: [url_photo_1] | [url_photo_2] | [url_photo_3]
+(Chercher via web search les URLs directes des photos de l'hôtel sur Booking.com CDN (cf.bstatic.com), TripAdvisor, Hotels.com ou site officiel. Mettre 2-4 URLs séparées par | . Si aucune image trouvée, omettre la ligne IMAGES.)
+
+Tableau de détails :
+| Critère | Détail |
+|---|---|
+| Étoiles | ★★★★★ |
+| Note | X.X/10 (source) |
+| Zone | Quartier, position |
+| Chambre | Type, superficie |
+| Équipements | Liste complète |
+| Petit-déjeuner | Inclus / En option / Non |
+| Piscine | Oui/Non + détails |
+| Spa | Oui/Non + détails |
+| Vue | Vue mer/ville/jardin |
+| Prix/nuit | XXX CHF |
+| Prix total | XXX CHF (X nuits) |
+| Lien | [Booking.com](url) · [Site officiel](url) |
 
 ## 💰 Totaux en CHF
 Tableau synthétique des 3 scénarios complets (vols + hébergements + transferts) :
