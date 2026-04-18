@@ -166,20 +166,18 @@ function HotelCard({name,lines,t}){
   if(chips.length<6)chips.push("Lit double");
   if(chips.length<6)chips.push("Salle de bain privée");
   const rN=parseFloat(noteNum||"0");const rC=rN>=9?"#16a34a":rN>=8?"#1d8348":"#2e7d32";
-  // Image: try API url first, then picsum.photos (always works)
-  const seed=encodeURIComponent(name.replace(/[^\w]/g,"").substring(0,20));
-  const fallbackImg=`https://picsum.photos/seed/${seed}/800/400`;
-  const[imgSrc,setImgSrc]=useState(imgs[0]||fallbackImg);
-  const[imgFail,setImgFail]=useState(0);
-  const onImgErr=()=>{if(imgFail===0&&imgs[0]){setImgSrc(fallbackImg);setImgFail(1);}else{setImgFail(2);}};
+  // Image: try API url, if fails show clean branded placeholder
+  const[imgSrc,setImgSrc]=useState(imgs[0]||null);
+  const[imgOk,setImgOk]=useState(!!imgs[0]);
+  const onImgErr=()=>{if(imgs.length>1&&imgSrc===imgs[0]){setImgSrc(imgs[1]);}else{setImgOk(false);}};
 
   return(<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:14,marginBottom:14,overflow:"hidden"}}>
     <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:"none",border:"none",cursor:"pointer",borderBottom:open?`1px solid ${t.border}`:"none"}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{stars>0&&<span style={{color:t.gold,fontSize:12}}>{"★".repeat(stars)}</span>}<span style={{fontSize:15,fontWeight:700,color:t.text}}>{name}</span></div><span style={{color:t.muted,fontSize:16}}>{open?"−":"+"}</span></button>
     {open&&<>
       <div style={{height:200,overflow:"hidden",position:"relative"}}>
-        {imgFail<2?<img src={imgSrc} alt={name} onError={onImgErr} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1f3c,#0f3460)",color:"rgba(255,255,255,0.5)",fontSize:12,textAlign:"center"}}><div>Photos sur le site officiel</div></div>}
-        {imgs.length>1&&<div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff"}}>{imgs.length} photos</div>}
+        {imgOk&&imgSrc?<img src={imgSrc} alt={name} onError={onImgErr} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(135deg,${t.card} 0%,${t.gold}15 50%,${t.card} 100%)`,padding:20,textAlign:"center"}}><div><div style={{fontSize:11,fontWeight:700,color:t.gold,letterSpacing:"0.1em",marginBottom:6}}>{stars>0?"★".repeat(stars):""}</div><div style={{fontSize:18,fontWeight:800,color:t.text}}>{name}</div>{zone&&<div style={{fontSize:12,color:t.muted,marginTop:6}}>{zone}</div>}{pN&&<div style={{fontSize:20,fontWeight:900,color:t.gold,marginTop:8,fontFamily:MO}}>{fmt(pN)} CHF<span style={{fontSize:12,fontWeight:400,color:t.muted}}> / nuit</span></div>}</div></div>}
+        {imgOk&&imgs.length>1&&<div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff"}}>{imgs.length} photos</div>}
       </div>
       <div style={{padding:"16px 20px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:12}}>
@@ -460,7 +458,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.4</div>
       <ChatWidget t={t}/>
     </div>
   );
