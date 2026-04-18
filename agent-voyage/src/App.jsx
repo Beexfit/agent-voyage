@@ -15,7 +15,7 @@ const TIPS=["Recherche des vols...","Consultation de Skyscanner...","Vérificati
 const DARK={bg:"#0a0a0a",card:"#141414",card2:"#1c1c1c",input:"#202020",border:"#2a2218",text:"#f5f0e8",muted:"#999",faint:"#444",gold:"#c9a96e",goldD:"#a07840",goldBg:"rgba(201,169,110,0.06)",goldBg2:"rgba(201,169,110,0.12)",green:"#22c55e",red:"#ef4444",blue:"#5b9bd5"};
 const LIGHT={bg:"#f5f3ef",card:"#ffffff",card2:"#f0ede7",input:"#faf9f7",border:"#e0dcd4",text:"#1a1a1a",muted:"#6a6560",faint:"#ccc",gold:"#a6872f",goldD:"#8a7535",goldBg:"rgba(166,135,47,0.06)",goldBg2:"rgba(166,135,47,0.12)",green:"#3a8f4a",red:"#c94444",blue:"#3a7abf"};
 const FN="system-ui,-apple-system,sans-serif",MO="'SF Mono',monospace";
-const fmt=n=>{try{const s=String(n).replace(/['\sCHFchf]/g,"").trim();const v=parseInt(s);return isNaN(v)?n:v.toLocaleString("fr-CH")}catch{return n}};
+const fmt=n=>{try{const s=String(n).replace(/\*\*/g,"").replace(/['\s,CHFchf]/g,"").trim();const v=parseInt(s);return isNaN(v)?String(n).replace(/\*\*/g,""):v.toLocaleString("fr-CH")}catch{return n}};
 
 // ═══════════════════════════════════════════════════════════════
 // TEXT PREPROCESSING — collapse multi-line table rows
@@ -216,16 +216,17 @@ function TotauxDisplay({lines,t}){
   const rows=parseRows(lines);const header=rows[0];const data=rows.slice(1);
   const[idx,setIdx]=useState(0);
   if(!data.length)return null;const active=data[idx]||data[0];
-  const totalVal=parseInt(String(active[active.length-1]||"0").replace(/['\sCHFchf]/g,""))||0;
+  const rawTotal=String(active[active.length-1]||"0").replace(/\*\*/g,"").replace(/['\s,CHFchf]/g,"");
+  const totalVal=parseInt(rawTotal)||0;
   const actEst=Math.round(totalVal*0.12/100)*100;
   // Parse individual cost columns (skip scenario name and total)
   const costs=[];
-  if(header)for(let i=1;i<header.length-1;i++){const val=active[i]||"";if(val){const num=parseInt(String(val).replace(/[^\d]/g,""))||0;const detail=val.match(/\(([^)]+)\)/)?.[1]||"";costs.push({label:header[i],value:num,detail,raw:val});}}
+  if(header)for(let i=1;i<header.length-1;i++){const val=active[i]||"";if(val){const clean=String(val).replace(/\*\*/g,"");const num=parseInt(clean.replace(/[^\d]/g,""))||0;const detail=clean.match(/\(([^)]+)\)/)?.[1]||"";costs.push({label:header[i].replace(/\*\*/g,""),value:num,detail,raw:clean});}}
 
   return(<div>
     {/* === SCENARIO TABS === */}
     <div style={{display:"grid",gridTemplateColumns:`repeat(${data.length},1fr)`,gap:0,marginBottom:24}}>
-      {data.map((r,i)=>{const on=i===idx;const total=r[r.length-1]||"";const name=(r[0]||"").replace(/💺|🔀|🪑/g,"").trim();
+      {data.map((r,i)=>{const on=i===idx;const total=r[r.length-1]||"";const name=(r[0]||"").replace(/\*\*/g,"").replace(/💺|🔀|🪑|💰|🔄|🎒/g,"").trim();
       return<button key={i} onClick={()=>setIdx(i)} style={{padding:"20px 12px",textAlign:"center",background:on?t.card2:t.card,border:`1px solid ${on?t.gold:t.border}`,borderRadius:i===0?"14px 0 0 14px":i===data.length-1?"0 14px 14px 0":"0",cursor:"pointer",position:"relative",borderLeft:i>0?"none":undefined}}>
         {on&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:t.gold,borderRadius:i===0?"14px 0 0 0":i===data.length-1?"0 14px 0 0":"0"}}/>}
         <div style={{fontSize:10,fontWeight:600,color:on?t.gold:t.muted,letterSpacing:"0.06em",lineHeight:1.4,marginBottom:8}}>{name.toUpperCase()}</div>
@@ -432,10 +433,12 @@ export default function App(){
                 <div style={{textAlign:"center",color:t.gold,fontWeight:900,fontSize:16,paddingBottom:14}}>→</div>
                 <div><Lbl t={t}>Vers</Lbl><input value={leg.to} onChange={e=>uLeg(idx,"to",e.target.value)} placeholder="Destination" style={INP}/></div>
               </div>
+              {idx===legs.length-1||legs.length===1?
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div><Lbl t={t}>Date aller</Lbl><DateCell value={leg.d1} onChange={v=>uLeg(idx,"d1",v)} flex={leg.f1} onFlex={v=>uLeg(idx,"f1",v)} t={t}/></div>
                 <div><Lbl t={t}>Date retour</Lbl><DateCell value={leg.d2} onChange={v=>uLeg(idx,"d2",v)} flex={leg.f2} onFlex={v=>uLeg(idx,"f2",v)} t={t}/></div>
               </div>
+              :<div><Lbl t={t}>Date de départ</Lbl><DateCell value={leg.d1} onChange={v=>uLeg(idx,"d1",v)} flex={leg.f1} onFlex={v=>uLeg(idx,"f1",v)} t={t}/></div>}
             </div>)}
             {legs.length<5&&<button onClick={addLeg} style={{fontSize:11,padding:"7px 16px",border:`1px dashed ${t.border}`,background:"transparent",cursor:"pointer",color:t.muted,borderRadius:8,marginBottom:8}}>+ Étape ({legs.length}/5)</button>}
           </div>
@@ -458,7 +461,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.5</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.6</div>
       <ChatWidget t={t}/>
     </div>
   );
