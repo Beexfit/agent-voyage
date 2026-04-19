@@ -228,13 +228,13 @@ function TotauxDisplay({lines,t}){
 
   return(<div>
     {/* === SCENARIO TABS === */}
-    <div style={{display:"grid",gridTemplateColumns:`repeat(${data.length},1fr)`,gap:0,marginBottom:24}}>
+    <div style={{display:"flex",gap:0,marginBottom:20,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
       {data.map((r,i)=>{const on=i===idx;const total=r[r.length-1]||"";const name=(r[0]||"").replace(/\*\*/g,"").replace(/💺|🔀|🪑|💰|🔄|🎒/g,"").trim();
-      return<button key={i} onClick={()=>setIdx(i)} style={{padding:"20px 12px",textAlign:"center",background:on?t.card2:t.card,border:`1px solid ${on?t.gold:t.border}`,borderRadius:i===0?"14px 0 0 14px":i===data.length-1?"0 14px 14px 0":"0",cursor:"pointer",position:"relative",borderLeft:i>0?"none":undefined}}>
-        {on&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:t.gold,borderRadius:i===0?"14px 0 0 0":i===data.length-1?"0 14px 0 0":"0"}}/>}
-        <div style={{fontSize:10,fontWeight:600,color:on?t.gold:t.muted,letterSpacing:"0.06em",lineHeight:1.4,marginBottom:8}}>{name.toUpperCase()}</div>
-        <div style={{fontSize:26,fontWeight:900,color:on?t.gold:t.muted,fontFamily:MO}}>{fmt(total)}</div>
-        <div style={{fontSize:10,color:on?t.gold:t.muted,marginTop:2}}>CHF total</div>
+      return<button key={i} onClick={()=>setIdx(i)} style={{flex:"1 0 0",minWidth:100,padding:"14px 8px",textAlign:"center",background:on?t.card2:t.card,border:`1px solid ${on?t.gold:t.border}`,borderRadius:i===0?"12px 0 0 12px":i===data.length-1?"0 12px 12px 0":"0",cursor:"pointer",position:"relative",borderLeft:i>0?"none":undefined}}>
+        {on&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:t.gold,borderRadius:i===0?"12px 0 0 0":i===data.length-1?"0 12px 0 0":"0"}}/>}
+        <div style={{fontSize:8,fontWeight:600,color:on?t.gold:t.muted,letterSpacing:"0.04em",lineHeight:1.3,marginBottom:6,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{name.toUpperCase()}</div>
+        <div style={{fontSize:20,fontWeight:900,color:on?t.gold:t.muted,fontFamily:MO}}>{fmt(total)}</div>
+        <div style={{fontSize:9,color:on?t.gold:t.muted,marginTop:2}}>CHF</div>
       </button>})}
     </div>
 
@@ -243,23 +243,23 @@ function TotauxDisplay({lines,t}){
       {costs.map((c,i)=>{
         const pct=totalVal>0?Math.round(c.value/totalVal*100):0;
         const barColor=i===0?t.gold:i===1?t.blue:"#9b59b6";
-        return<div key={i} style={{padding:"18px 22px",borderBottom:`1px solid ${t.border}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-            <div><div style={{fontSize:13,fontWeight:600,color:t.text}}>{c.label.replace(/CHF/gi,"").trim()}</div>{c.detail&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>{c.detail}</div>}</div>
-            <div style={{textAlign:"right"}}><span style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{fmt(c.value)}</span><span style={{fontSize:12,color:t.muted,marginLeft:4}}>CHF</span></div>
+        return<div key={i} style={{padding:"14px 16px",borderBottom:`1px solid ${t.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+            <div><div style={{fontSize:13,fontWeight:600,color:t.text}}>{c.label.replace(/CHF/gi,"").trim()}</div>{c.detail&&<div style={{fontSize:10,color:t.muted,marginTop:2}}>{c.detail}</div>}</div>
+            <div style={{textAlign:"right",flexShrink:0}}><span style={{fontSize:16,fontWeight:800,color:t.text,fontFamily:MO}}>{fmt(c.value)}</span><span style={{fontSize:11,color:t.muted,marginLeft:4}}>CHF</span></div>
           </div>
           <div style={{height:4,background:t.border,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:barColor,borderRadius:2}}/></div>
         </div>;
       })}
 
       {/* TOTAL */}
-      <div style={{padding:"20px 22px",background:t.goldBg,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${t.border}`}}>
-        <div style={{fontSize:14,fontWeight:800,color:t.gold,letterSpacing:"0.04em"}}>TOTAL</div>
-        <div><span style={{fontSize:28,fontWeight:900,color:t.gold,fontFamily:MO}}>{fmt(totalVal)}</span><span style={{fontSize:14,color:t.gold,marginLeft:6}}>CHF</span></div>
+      <div style={{padding:"16px",background:t.goldBg,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${t.border}`}}>
+        <div style={{fontSize:13,fontWeight:800,color:t.gold,letterSpacing:"0.04em"}}>TOTAL</div>
+        <div><span style={{fontSize:24,fontWeight:900,color:t.gold,fontFamily:MO}}>{fmt(totalVal)}</span><span style={{fontSize:13,color:t.gold,marginLeft:4}}>CHF</span></div>
       </div>
 
       {/* ACTIVITIES ESTIMATE */}
-      {actEst>0&&<div style={{padding:"16px 22px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      {actEst>0&&<div style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div><div style={{fontSize:13,fontWeight:500,color:t.muted}}>Budget activités estimé</div><div style={{fontSize:10,color:t.faint,marginTop:2}}>Restaurants, excursions, transports locaux (~12%)</div></div>
         <div><span style={{fontSize:15,fontWeight:700,color:t.muted,fontFamily:MO}}>~{fmt(actEst)}</span><span style={{fontSize:11,color:t.muted,marginLeft:4}}>CHF</span></div>
       </div>}
@@ -384,12 +384,12 @@ return(<div style={{position:"fixed",bottom:20,right:W?16:20,width:W?"calc(100vw
 function LoyaltySelector({selected,onChange,points,onPoints,t}){return(<div><div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:selected.length>0?14:0}}>{LOYALTY.map(p=>{const on=selected.includes(p.id);return<button key={p.id} onClick={()=>onChange(on?selected.filter(x=>x!==p.id):[...selected,p.id])} style={{padding:"6px 13px",borderRadius:20,border:`1px solid ${on?t.gold:t.border}`,background:on?t.goldBg2:"transparent",color:on?t.gold:t.muted,fontSize:11,cursor:"pointer"}}>{p.short}</button>;})}</div>{selected.length>0&&<div style={{background:t.card2,borderRadius:10,padding:"14px 16px"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}><Lbl t={t}>Points</Lbl><span style={{fontSize:14,fontWeight:800,color:t.gold,fontFamily:MO}}>{points>=100000?">100k":points.toLocaleString("fr-CH")} pts</span></div><input type="range" min="0" max="10" step="1" value={Math.max(0,POINTS_MARKS.findIndex(v=>v===points))} onChange={e=>onPoints(POINTS_MARKS[+e.target.value]||0)} style={{width:"100%",accentColor:t.gold}}/></div>}</div>);}
 
 function DateCell({value,onChange,flex,onFlex,t}){return(<div>
-  <input type="date" value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:14,padding:"13px 14px",outline:"none",minHeight:48,colorScheme:"dark"}}/>
-  <div style={{display:"flex",gap:5,marginTop:5}}>
-    <button onClick={()=>onFlex(0)} style={{fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:10,border:`1px solid ${flex===0?t.gold:t.border}`,background:flex===0?t.goldBg2:"transparent",color:flex===0?t.gold:t.muted,cursor:"pointer"}}>EXACT</button>
-    <button onClick={()=>onFlex(flex===0?3:flex)} style={{fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:10,border:`1px solid ${flex>0?t.gold:t.border}`,background:flex>0?t.goldBg2:"transparent",color:flex>0?t.gold:t.muted,cursor:"pointer"}}>{flex>0?`± ${flex}j`:"± JOURS"}</button>
+  <input type="date" value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:13,padding:"12px 10px",outline:"none",minHeight:44,colorScheme:"dark",WebkitAppearance:"none",overflow:"hidden"}}/>
+  <div style={{display:"flex",gap:4,marginTop:4}}>
+    <button onClick={()=>onFlex(0)} style={{fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:10,border:`1px solid ${flex===0?t.gold:t.border}`,background:flex===0?t.goldBg2:"transparent",color:flex===0?t.gold:t.muted,cursor:"pointer"}}>EXACT</button>
+    <button onClick={()=>onFlex(flex===0?3:flex)} style={{fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:10,border:`1px solid ${flex>0?t.gold:t.border}`,background:flex>0?t.goldBg2:"transparent",color:flex>0?t.gold:t.muted,cursor:"pointer"}}>{flex>0?`± ${flex}j`:"± JOURS"}</button>
   </div>
-  {flex>0&&<div style={{marginTop:7,padding:"8px 12px",background:t.card2,borderRadius:8}}><input type="range" min="1" max="21" value={flex} onChange={e=>onFlex(+e.target.value)} style={{width:"100%",accentColor:t.gold}}/><div style={{textAlign:"right",fontSize:11,color:t.gold,fontWeight:700}}>± {flex}j</div></div>}
+  {flex>0&&<div style={{marginTop:5,padding:"6px 10px",background:t.card2,borderRadius:8}}><input type="range" min="1" max="21" value={flex} onChange={e=>onFlex(+e.target.value)} style={{width:"100%",accentColor:t.gold}}/><div style={{textAlign:"right",fontSize:10,color:t.gold,fontWeight:700}}>± {flex}j</div></div>}
 </div>);}
 
 // ═══════════════════════════════════════════════════════════════
@@ -410,7 +410,7 @@ export default function App(){
   const addLeg=()=>{if(legs.length<5)setLegs(l=>[...l,{to:"",d1:l[l.length-1].d2||"",d2:"",f1:0,f2:0}]);};
   const removeLeg=i=>setLegs(l=>l.filter((_,j)=>j!==i));
   const uLeg=(i,f,v)=>{setLegs(l=>{const n=[...l];n[i]={...n[i],[f]:v};if(f==="d2"&&i+1<n.length)n[i+1]={...n[i+1],d1:v};return n;});};
-  const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:14,fontFamily:FN,padding:"13px 14px",outline:"none"};
+  const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:13,fontFamily:FN,padding:"12px 10px",outline:"none",minHeight:44,overflow:"hidden",textOverflow:"ellipsis"};
 
   const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules. VOLS: créer un ### séparé par segment (### GVA vers AGP, ### AGP vers MIA, ### MIA vers GVA) avec chacun son propre tableau de 3 scénarios. HÉBERGEMENTS: ### Ville (dates) puis #### Nom Hôtel. IMAGES: chercher les vraies URLs sur Booking.com (cf.bstatic.com) ou le site officiel. Si aucune URL trouvée, ne PAS écrire la ligne IMAGES. MÉTÉO: ### Ville (Mois). Totaux CHF avec les 3 scénarios."].filter(Boolean).join("\n");};
   const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
@@ -471,7 +471,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v5.9</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.0</div>
       <ChatWidget t={t}/>
     </div>
   );
