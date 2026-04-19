@@ -29,8 +29,23 @@ function preprocess(raw){
 
 function parseSections(text){const pp=preprocess(text);const lines=pp.split("\n");const secs=[];let cur=null;for(const l of lines){const h2=l.match(/^## (.+)/);if(h2){if(cur)secs.push(cur);cur={title:h2[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);}if(cur)secs.push(cur);return secs;}
 function parseRows(lines){const rows=[];for(const l of lines){const s=l.trim();if(s.startsWith("|")&&s.endsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim());if(cells.length>=2)rows.push(cells);}}return rows;}
-// Flight parser: collects ALL cell values from pipe fragments, groups by column count
-function parseFlightRows(lines){let colCount=8;const sep=lines.find(l=>/^\|[\s:\-|]+\|$/.test(l.trim()));if(sep)colCount=(sep.match(/\|/g)||[]).length-1;let pastSep=!sep;const allCells=[];for(const l of lines){const s=l.trim();if(/^\|[\s:\-|]+\|$/.test(s)){pastSep=true;continue;}if(!pastSep&&s.startsWith("|")){continue;}if(!pastSep||s.startsWith("#")||!s)continue;if(s.includes("|")){const parts=s.split("|");const cells=parts.slice(s.startsWith("|")?1:0).map(c=>c.trim());while(cells.length&&cells[cells.length-1]==="")cells.pop();allCells.push(...cells);}else if(allCells.length){allCells[allCells.length-1]+=" "+s;}}const rows=[];for(let i=0;i<allCells.length;i+=colCount){const r=allCells.slice(i,i+colCount);if(r.length>=3)rows.push(r);}return rows;}
+// Flight parser: joins all text, splits by |, groups by column count — immune to line breaks
+function parseFlightRows(lines){
+  const text=lines.join("\n");
+  // Find separator line
+  const sepMatch=text.match(/\|[\-\s:]+\|[\-\s:]+\|[\-\s:]+\|/);
+  if(!sepMatch)return[];
+  const sepLine=text.substring(sepMatch.index).split("\n")[0];
+  const colCount=(sepLine.match(/\|/g)||[]).length-1;
+  // Everything after separator, remove ### headers, flatten to single line
+  const afterSep=text.substring(sepMatch.index+sepLine.length);
+  const cleaned=afterSep.replace(/###[^\n]*/g,"").replace(/\n/g," ");
+  // Split by | and filter empties and separator remnants
+  const parts=cleaned.split("|").map(c=>c.trim()).filter(c=>c&&!/^[\-\s:]+$/.test(c));
+  // Group into rows
+  const rows=[];for(let i=0;i<parts.length;i+=colCount){const r=parts.slice(i,i+colCount);if(r.length>=3)rows.push(r);}
+  return rows;
+}
 function parseKV(lines){const d={};const rows=parseRows(lines);for(const r of rows){if(r.length>=2&&r[0])d[r[0]]=r[1];}return d;}
 function titleIcon(t){const m=t.match(/^([\u{1F300}-\u{1FFFF}][\uFE0F\u200D]*)+\s*/u);return m?{icon:m[0].trim(),label:t.slice(m[0].length).trim()}:{icon:"",label:t};}
 function inline(s){return(s||"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g,`<a href="$2" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">$1 ↗</a>`);}
@@ -51,13 +66,13 @@ function RecapDisplay({lines,t}){
   // Extract key info
   let nights=0,voy="1";
   for(const r of data){const all=r.join(" ");
-    const nm=all.match(/(\d+)\s*nuit/g);if(nm)nm.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});
+    const nm=all.match(/(\d+)\+?\s*nuit/g);if(nm)nm.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});
     if(/personne|voyag/i.test(all)){const m=all.match(/(\d+)\s*personne/i)||all.match(/(\d+)\s*voyag/i);if(m)voy=m[1];}
   }
   // Also check header row for column-based format
   if(!nights&&rows[0]){const hdr=rows[0];for(let i=0;i<hdr.length;i++){if(/dur|nuit/i.test(hdr[i])){for(const r of data){const nm=(r[i]||"").match(/(\d+)/);if(nm)nights+=parseInt(nm[1])||0;}}if(/voyag|pers/i.test(hdr[i])){for(const r of data){const m=(r[i]||"").match(/(\d+)/);if(m)voy=m[1];}}}}
   // Last resort: search ALL raw lines for "X nuits"
-  if(!nights){for(const l of lines){const m=l.match(/(\d+)\s*nuit/gi);if(m)m.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});}}
+  if(!nights){for(const l of lines){const m=l.match(/(\d+)\+?\s*nuit/gi);if(m)m.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});}}
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
       <div style={{background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:12,padding:"20px 16px",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:t.goldD,letterSpacing:"0.08em",marginBottom:8}}>NUITS</div><div style={{fontSize:32,fontWeight:900,color:t.text}}>{nights||"–"}</div></div>
@@ -82,7 +97,7 @@ function FlightDisplay({lines,t}){
   // Parse rows for each vol section
   for(const vol of vols)vol.rows=parseFlightRows(vol.lines);
 
-  const match=(scenario,c)=>{const s=scenario.toLowerCase();if(c==="business")return/business|💺/i.test(s)&&!/éco|eco|🔀/i.test(s);if(c==="mixte")return/mixte|🔀|éco.*biz|biz.*retour/i.test(s);return/économie|🪑|full éco/i.test(s);};
+  const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=/business|💺/i.test(s)&&!/éco|eco|mix|🔀/i.test(s);const isMix=/mixte|mix|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
   const tabs=[{id:"business",e:"",l:"Business"},{id:"mixte",e:"",l:"Mixte"},{id:"eco",e:"",l:"Économie"}];
 
   return(<div>
@@ -179,7 +194,7 @@ function HotelCard({name,lines,t}){
     {open&&<>
       <div style={{height:200,overflow:"hidden",position:"relative"}}>
         {imgOk&&imgSrc?<img src={imgSrc} alt={name} onError={onImgErr} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(135deg,${t.card} 0%,${t.gold}15 50%,${t.card} 100%)`,padding:20,textAlign:"center"}}><div><div style={{fontSize:11,fontWeight:700,color:t.gold,letterSpacing:"0.1em",marginBottom:6}}>{stars>0?"★".repeat(stars):""}</div><div style={{fontSize:18,fontWeight:800,color:t.text}}>{name}</div>{zone&&<div style={{fontSize:12,color:t.muted,marginTop:6}}>{zone}</div>}{pN&&<div style={{fontSize:20,fontWeight:900,color:t.gold,marginTop:8,fontFamily:MO}}>{fmt(pN)} CHF<span style={{fontSize:12,fontWeight:400,color:t.muted}}> / nuit</span></div>}</div></div>}
+        :<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(135deg,${t.card} 0%,${t.gold}15 50%,${t.card} 100%)`,padding:"16px 12px",textAlign:"center",boxSizing:"border-box"}}><div style={{maxWidth:"100%",overflow:"hidden"}}><div style={{fontSize:10,fontWeight:700,color:t.gold,letterSpacing:"0.1em",marginBottom:4}}>{stars>0?"★".repeat(stars):""}</div><div style={{fontSize:15,fontWeight:800,color:t.text,lineHeight:1.3,wordBreak:"break-word"}}>{name}</div>{zone&&<div style={{fontSize:11,color:t.muted,marginTop:4}}>{zone}</div>}{pN&&<div style={{fontSize:18,fontWeight:900,color:t.gold,marginTop:6,fontFamily:MO}}>{fmt(pN)} CHF<span style={{fontSize:11,fontWeight:400,color:t.muted}}> / nuit</span></div>}</div></div>}
         {imgOk&&imgs.length>1&&<div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff"}}>{imgs.length} photos</div>}
       </div>
       <div style={{padding:"16px 20px"}}>
@@ -413,7 +428,7 @@ export default function App(){
   const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:13,fontFamily:FN,padding:"12px 10px",outline:"none",minHeight:44,overflow:"hidden",textOverflow:"ellipsis"};
 
   const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules. VOLS: créer un ### séparé par segment (### GVA vers AGP, ### AGP vers MIA, ### MIA vers GVA) avec chacun son propre tableau de 3 scénarios. HÉBERGEMENTS: ### Ville (dates) puis #### Nom Hôtel. IMAGES: chercher les vraies URLs sur Booking.com (cf.bstatic.com) ou le site officiel. Si aucune URL trouvée, ne PAS écrire la ligne IMAGES. MÉTÉO: ### Ville (Mois). Totaux CHF avec les 3 scénarios."].filter(Boolean).join("\n");};
-  const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
+  const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const raw=await res.text();let data;try{data=JSON.parse(raw);}catch{throw new Error(raw.substring(0,200));}if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
   const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
 
   return(
@@ -471,7 +486,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.0</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.3</div>
       <ChatWidget t={t}/>
     </div>
   );
