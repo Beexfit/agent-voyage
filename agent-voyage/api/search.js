@@ -162,6 +162,7 @@ FORMAT DE RÉPONSE OBLIGATOIRE — respecter exactement cette structure :
 
 ## 📋 Récapitulatif
 Tableau : dates · destinations · durées de séjour · nombre de voyageurs
+IMPORTANT : Toujours indiquer le nombre EXACT de nuits (ex: "9 nuits" pas "10+ nuits" ni "environ 10 nuits"). Calculer précisément à partir des dates.
 
 ## ✈️ Vols
 Pour CHAQUE segment de vol, créer un ### séparé avec son propre tableau de 3 scénarios :
