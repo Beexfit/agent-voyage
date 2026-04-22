@@ -173,11 +173,10 @@ NE PAS mettre ** (markdown bold) dans les cellules de tableau.
 
 RÈGLES DE PRIX VOLS CRITIQUES :
 - Les 3 scénarios DOIVENT être : "💺 Business" (vraie classe business), "🔀 Mixte" (éco sur court-courrier + business sur long-courrier), "🪑 Économie" (tout en éco)
-- Le prix Business DOIT être 2 à 5 fois plus cher que l'Économie. Si ce n'est pas le cas, le prix trouvé est FAUX - chercher le vrai prix business.
-- Court-courrier Europe (<4h) : Éco 50-200 CHF, Business 300-900 CHF
-- Long-courrier transatlantique : Éco 400-1200 CHF, Business 1500-5000 CHF
-- Long-courrier Asie/Océanie : Éco 500-1500 CHF, Business 2000-7000 CHF
-- Si aucun prix business fiable trouvé, écrire "Sur demande" au lieu d'inventer un prix
+- TOUJOURS chercher les vrais prix via web search — ne jamais estimer ou inventer
+- Si un prix business semble très proche du prix éco, VÉRIFIER en cherchant spécifiquement "business class [route] price" — c'est peut-être une vraie promo, ou une erreur
+- Si le prix trouvé est confirmé bas, le garder tel quel — ne pas rejeter les bonnes affaires
+- Si aucun prix business trouvé malgré les recherches, mettre le lien Kayak avec filtre business pour que l'utilisateur puisse vérifier lui-même
 
 LIENS VOLS OBLIGATOIRES :
 - Générer des liens Kayak avec dates préremplies au format : https://www.kayak.com/flights/CODE_DEPART-CODE_ARRIVEE/YYYY-MM-DD?sort=bestflight_a&fs=cabin=b (pour business) ou cabin=e (pour éco)
@@ -232,10 +231,9 @@ Lounge disponible · Opportunité miles (si applicable) · Upgrade estimé en mi
 
 RÈGLES ABSOLUES :
 - Prix en CHF · Destinations sûres · Max 2 escales · Note hôtel ≥ 8/10 · 4★ minimum
-- Ne jamais inventer de prix — si un prix n'est pas trouvé via web search, écrire "Non trouvé"
+- Ne jamais inventer de prix — chercher via web search. Si introuvable, fournir un lien Kayak pour vérification
 - NE PAS mettre ** dans les tableaux
 - NOMS DE SCÉNARIOS VOLS : utiliser EXACTEMENT "💺 Business", "🔀 Mixte", "🪑 Économie" comme noms. Pas "Premium", "Confort", "Direct économique" ou autre variante
-- VALIDATION PRIX : Avant de soumettre, vérifier que le prix Business > 2x le prix Économie. Sinon corriger
 - LIENS : Toujours des liens de recherche Kayak/Google Flights avec dates, JAMAIS des liens vers la page d'accueil d'une compagnie`;
 
 export default async function handler(req, res) {
