@@ -428,7 +428,7 @@ export default function App(){
   const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:13,fontFamily:FN,padding:"12px 10px",outline:"none",minHeight:44,overflow:"hidden",textOverflow:"ellipsis"};
 
   const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules. VOLS: créer un ### séparé par segment (### GVA vers AGP, ### AGP vers MIA, ### MIA vers GVA) avec chacun son propre tableau de 3 scénarios. HÉBERGEMENTS: ### Ville (dates) puis #### Nom Hôtel. IMAGES: chercher les vraies URLs sur Booking.com (cf.bstatic.com) ou le site officiel. Si aucune URL trouvée, ne PAS écrire la ligne IMAGES. MÉTÉO: ### Ville (Mois). Totaux CHF avec les 3 scénarios."].filter(Boolean).join("\n");};
-  const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const raw=await res.text();let data;try{data=JSON.parse(raw);}catch{throw new Error(raw.substring(0,200));}if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
+  const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
   const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
 
   return(
@@ -486,7 +486,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.3</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.2</div>
       <ChatWidget t={t}/>
     </div>
   );
