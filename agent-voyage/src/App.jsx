@@ -67,6 +67,8 @@ function RecapDisplay({lines,t}){
   // Extract key info
   let nights=0,voy="1";
   for(const r of data){const all=r.join(" ");
+    // Skip total/summary rows to avoid double counting
+    if(/total|sous-total|somme|résumé/i.test(r[0]||""))continue;
     const nm=all.match(/(\d+)\+?\s*nuit/g);if(nm)nm.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});
     if(/personne|voyag/i.test(all)){const m=all.match(/(\d+)\s*personne/i)||all.match(/(\d+)\s*voyag/i);if(m)voy=m[1];}
   }
@@ -433,7 +435,13 @@ export default function App(){
   const INP={width:"100%",boxSizing:"border-box",background:t.input,border:`1px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:13,fontFamily:FN,padding:"12px 10px",outline:"none",minHeight:44,overflow:"hidden",textOverflow:"ellipsis"};
 
   const buildPrompt=()=>{const ap=from==="OTHER"?fromCustom.toUpperCase():from;const ll=legs.filter(l=>l.to).map((l,i)=>{const fp=i===0?ap:(legs[i-1].to||ap);const p=[`Vol ${i+1} : ${fp} -> ${l.to}`];if(l.d1)p.push(`départ ${l.d1}${l.f1>0?` (±${l.f1}j)`:""}`);if(l.d2)p.push(i===legs.length-1?`retour ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`:`arrivée ${l.d2}${l.f2>0?` (±${l.f2}j)`:""}`);return"✈️ "+p.join(" - ");});return["Planifie ce voyage :",`Aéroport : ${ap}`,...ll,`Voyageurs : ${travelers}`,baggage!=="no_pref"?`Bagages : ${BAGGAGE_OPTIONS.find(b=>b.id===baggage)?.label}`:"",loyaltyCards.length?`Fidélité : ${loyaltyCards.map(id=>LOYALTY.find(p=>p.id===id)?.short).join(", ")}`:"",vibes.length?`Ambiance : ${VIBES.filter(v=>vibes.includes(v.id)).map(v=>v.label).join(", ")}`:"",acts.length?`Activités : ${ACTIVITIES.filter(a=>acts.includes(a.id)).map(a=>a.label).join(", ")}`:"",notes?`Notes : ${notes}`:"","","FORMAT: Utiliser | comme début ET fin de chaque ligne de tableau. NE PAS mettre ** dans les cellules. VOLS: créer un ### séparé par segment (### GVA vers AGP, ### AGP vers MIA, ### MIA vers GVA) avec chacun son propre tableau de 3 scénarios. HÉBERGEMENTS: ### Ville (dates) puis #### Nom Hôtel. IMAGES: chercher les vraies URLs sur Booking.com (cf.bstatic.com) ou le site officiel. Si aucune URL trouvée, ne PAS écrire la ligne IMAGES. MÉTÉO: ### Ville (Mois). Totaux CHF avec les 3 scénarios."].filter(Boolean).join("\n");};
-  const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}]})});const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
+  const go=async()=>{if(!legs[0].to||!legs[0].d1){setErr("Destination et date requises.");return;}setPhase("loading");setErr("");setResult("");try{
+    const ap=from==="OTHER"?fromCustom.toUpperCase():from;
+    const flightLegs=legs.filter(l=>l.to).map((l,i)=>({from:i===0?ap:(legs[i-1].to||ap),to:l.to,date:l.d1,dateFlex:l.f1||0}));
+    // Add return leg for single destination
+    if(legs.length===1&&legs[0].d2){flightLegs.push({from:legs[0].to,to:ap,date:legs[0].d2,dateFlex:legs[0].f2||0});}
+    const res=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:buildPrompt()}],legs:flightLegs,travelers:parseInt(travelers)||1})});
+    const data=await res.json();if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);setResult(data.text||"Aucun résultat.");setPhase("done");setFormOpen(false);}catch(e){setErr(e.message);setPhase("error");}};
   const reset=()=>{setPhase("idle");setResult("");setErr("");setFormOpen(true);};
 
   return(
@@ -491,7 +499,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.6</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.0</div>
       <ChatWidget t={t}/>
     </div>
   );
