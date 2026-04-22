@@ -30,8 +30,8 @@ function preprocess(raw){
 function parseSections(text){
   const pp=preprocess(text).replace(/\r/g,"");const lines=pp.split("\n");const secs=[];let cur=null;
   for(const l of lines){const s=l.trimStart();
-    // Match ## Header, # Header, or standalone emoji headers
-    const h=s.match(/^#{1,3}\s+(.+)/)||s.match(/^((?:📋|✈️|🏨|💰|🌤️|💡|📅|💳)\s*.+)$/);
+    // Match # or ## headers (NOT ### which are sub-headers inside sections)
+    const h=s.match(/^#{1,2}(?!#)\s+(.+)/)||s.match(/^((?:📋|✈️|🏨|💰|🌤️|💡|📅|💳)\s*.+)$/);
     if(h){if(cur)secs.push(cur);cur={title:h[1].trim(),lines:[]};}
     else if(cur)cur.lines.push(l);
   }
@@ -166,10 +166,10 @@ function HotelCard({name,lines,t}){
   // KV data
   const kv={};const rows=parseRows(lines);for(const r of rows){if(r.length>=2)kv[r[0].toLowerCase()]=r[1];}
   const get=k=>{for(const[key,val]of Object.entries(kv)){if(key.includes(k))return val;}return"";};
-  const stars=(get("étoile")||get("etoile")||"").replace(/[^★]/g,"").length||0;
+  const stars=(get("étoile")||get("etoile")||get("type")||"").replace(/[^★⭐]/g,"").length||parseInt((get("étoile")||get("etoile")||get("type")||"").match(/(\d)\s*[ée]toile/i)?.[1])||0;
   const note=get("note");const noteNum=note.match(/(\d+\.?\d*)/)?.[1]||"";
   const zone=get("zone")||get("emplac");const chambre=get("chambre");
-  const equip=get("équip")||get("equip");const prixNuit=get("prix/nuit")||get("prix_nuit");
+  const equip=get("équip")||get("equip")||get("spécial");const prixNuit=get("prix/nuit")||get("prix_nuit")||get("prix estim")||get("prix");
   const prixTotal=get("prix total")||get("prix_total");
   const pN=prixNuit.match(/(\d[\d',.\s]*)/)?.[1]?.replace(/[',.\s]/g,"")||"";
   const pT=prixTotal.match(/(\d[\d',.\s]*)/)?.[1]?.replace(/[',.\s]/g,"")||"";
@@ -508,7 +508,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.1</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.2</div>
       <ChatWidget t={t}/>
     </div>
   );
