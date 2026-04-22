@@ -27,7 +27,16 @@ function preprocess(raw){
   return text;
 }
 
-function parseSections(text){const pp=preprocess(text);const lines=pp.split("\n");const secs=[];let cur=null;for(const l of lines){const h2=l.match(/^## (.+)/);if(h2){if(cur)secs.push(cur);cur={title:h2[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);}if(cur)secs.push(cur);return secs;}
+function parseSections(text){
+  const pp=preprocess(text).replace(/\r/g,"");const lines=pp.split("\n");const secs=[];let cur=null;
+  for(const l of lines){const s=l.trimStart();
+    // Match ## Header, # Header, or standalone emoji headers
+    const h=s.match(/^#{1,3}\s+(.+)/)||s.match(/^((?:📋|✈️|🏨|💰|🌤️|💡|📅|💳)\s*.+)$/);
+    if(h){if(cur)secs.push(cur);cur={title:h[1].trim(),lines:[]};}
+    else if(cur)cur.lines.push(l);
+  }
+  if(cur)secs.push(cur);return secs;
+}
 function parseRows(lines){const rows=[];for(const l of lines){const s=l.trim();if(s.startsWith("|")&&s.endsWith("|")&&!s.match(/^[\|\s:\-]+$/)){const cells=s.split("|").slice(1,-1).map(c=>c.trim());if(cells.length>=2)rows.push(cells);}}return rows;}
 // Flight parser: joins all text, splits by |, groups by column count — immune to line breaks
 function parseFlightRows(lines){
@@ -499,7 +508,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.0</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.1</div>
       <ChatWidget t={t}/>
     </div>
   );
