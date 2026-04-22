@@ -98,7 +98,7 @@ function FlightDisplay({lines,t}){
   // Parse rows for each vol section
   for(const vol of vols)vol.rows=parseFlightRows(vol.lines);
 
-  const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=/business|💺/i.test(s)&&!/éco|eco|mix|🔀/i.test(s);const isMix=/mixte|mix|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
+  const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=(/business|premium|first|💺/i.test(s))&&!/éco|eco|mix|🔀/i.test(s);const isMix=/mixte|mix|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
   const tabs=[{id:"business",e:"",l:"Business"},{id:"mixte",e:"",l:"Mixte"},{id:"eco",e:"",l:"Économie"}];
 
   return(<div>
@@ -324,16 +324,16 @@ function CalendrierDisplay({lines,t}){
     // Skip header if it looks like column names
     const isHdr=/date|jour|lieu|activ/i.test(hdr.join(" "));
     const rows=isHdr?data:tableRows;
-    for(const r of rows){const date=r[0]||"";const rest=r.slice(1).filter(c=>c).join(" - ");entries.push({date:date.trim(),act:rest.trim()});}
+    for(const r of rows){const date=(r[0]||"").replace(/\*\*/g,"");const rest=r.slice(1).filter(c=>c).map(c=>c.replace(/\*\*/g,"")).join(" - ");entries.push({date:date.trim(),act:rest.trim()});}
   }
   // Then: parse bold/bullet formats
   if(!entries.length){for(const l of lines){const s=l.trim();if(!s||/^\|/.test(s))continue;
     const hdr=s.match(/^\*\*([^*]+)\*\*\s*$/);
     if(hdr){entries.push({date:hdr[1].trim(),act:"",isHeader:true});continue;}
     const bold=s.match(/^\*\*([^*]+)\*\*\s*[:\-·]?\s*(.*)/);
-    if(bold){const date=bold[1].replace(/[:\-·]\s*$/,"").trim();const act=bold[2]?.trim()||"";if(date.length>2)entries.push({date,act});continue;}
+    if(bold){const date=bold[1].replace(/\*\*/g,"").replace(/[:\-·]\s*$/,"").trim();const act=(bold[2]||"").replace(/\*\*/g,"").trim();if(date.length>2)entries.push({date,act});continue;}
     const bullet=s.match(/^[-•]\s*(.+?)\s*:\s*(.*)/);
-    if(bullet&&bullet[1].length>2){entries.push({date:bullet[1].trim(),act:bullet[2].trim()});continue;}
+    if(bullet&&bullet[1].length>2){entries.push({date:bullet[1].replace(/\*\*/g,"").trim(),act:bullet[2].replace(/\*\*/g,"").trim()});continue;}
   }}
   if(!entries.length)return<div style={{color:t.muted,fontSize:13}}>Calendrier non disponible</div>;
   const[openI,setOpenI]=useState(null);const colors=[t.gold,"#e05555",t.blue,"#9b59b6",t.green,"#e67e22"];
@@ -487,7 +487,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.4</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.5</div>
       <ChatWidget t={t}/>
     </div>
   );
