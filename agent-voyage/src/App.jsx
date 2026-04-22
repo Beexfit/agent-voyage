@@ -95,10 +95,14 @@ function FlightDisplay({lines,t}){
   const vols=[];let cur=null;
   for(const l of lines){const h=l.match(/^###\s+(.+)/);if(h){if(cur)vols.push(cur);cur={title:h[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);else if(!cur){cur={title:"",lines:[]};cur.lines.push(l);}}
   if(cur)vols.push(cur);
-  // Parse rows for each vol section
-  for(const vol of vols)vol.rows=parseFlightRows(vol.lines);
+  // Parse rows for each vol section using standard parseRows (reliable)
+  for(const vol of vols){
+    const rows=parseRows(vol.lines);
+    // Skip header row (Scénario|Compagnie|...)
+    vol.rows=rows.length>1?rows.slice(1):rows;
+  }
 
-  const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=(/business|premium|first|💺/i.test(s))&&!/éco|eco|mix|🔀/i.test(s);const isMix=/mixte|mix|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
+  const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=(/business|premium|first|💺/i.test(s))&&!/éco|eco|mix|🔀|confort/i.test(s);const isMix=/mixte|mix|confort|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
   const tabs=[{id:"business",e:"",l:"Business"},{id:"mixte",e:"",l:"Mixte"},{id:"eco",e:"",l:"Économie"}];
 
   return(<div>
@@ -487,7 +491,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.5</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.6</div>
       <ChatWidget t={t}/>
     </div>
   );
