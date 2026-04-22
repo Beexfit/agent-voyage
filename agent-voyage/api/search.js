@@ -171,6 +171,19 @@ Pour CHAQUE segment de vol, créer un ### séparé avec son propre tableau de 3 
 NE PAS combiner tous les segments dans un seul tableau.
 NE PAS mettre ** (markdown bold) dans les cellules de tableau.
 
+RÈGLES DE PRIX VOLS CRITIQUES :
+- Les 3 scénarios DOIVENT être : "💺 Business" (vraie classe business), "🔀 Mixte" (éco sur court-courrier + business sur long-courrier), "🪑 Économie" (tout en éco)
+- Le prix Business DOIT être 2 à 5 fois plus cher que l'Économie. Si ce n'est pas le cas, le prix trouvé est FAUX - chercher le vrai prix business.
+- Court-courrier Europe (<4h) : Éco 50-200 CHF, Business 300-900 CHF
+- Long-courrier transatlantique : Éco 400-1200 CHF, Business 1500-5000 CHF
+- Long-courrier Asie/Océanie : Éco 500-1500 CHF, Business 2000-7000 CHF
+- Si aucun prix business fiable trouvé, écrire "Sur demande" au lieu d'inventer un prix
+
+LIENS VOLS OBLIGATOIRES :
+- Générer des liens Kayak avec dates préremplies au format : https://www.kayak.com/flights/CODE_DEPART-CODE_ARRIVEE/YYYY-MM-DD?sort=bestflight_a&fs=cabin=b (pour business) ou cabin=e (pour éco)
+- Exemple : https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a&fs=cabin=e
+- NE JAMAIS mettre un lien vers la page d'accueil d'une compagnie (swiss.com, airfrance.com). Toujours un lien de RECHERCHE avec les dates.
+
 ## 🏨 Hébergements
 Par destination, minimum 2 options : une "confort" (meilleur prix) et une "premium".
 Pour chaque hôtel, présenter dans cet ordre exact :
@@ -194,7 +207,10 @@ Tableau de détails :
 | Vue | Vue mer/ville/jardin |
 | Prix/nuit | XXX CHF |
 | Prix total | XXX CHF (X nuits) |
-| Lien | [Booking.com](url) · [Site officiel](url) |
+| Lien | [Booking.com](url_recherche_booking) · [Site officiel](url_site) |
+
+Pour les liens Booking.com, utiliser le format : https://www.booking.com/searchresults.html?ss=NOM+HOTEL+VILLE
+Pour les liens Kayak Hotels : https://www.kayak.com/hotels/NOM-HOTEL-VILLE/YYYY-MM-DD/YYYY-MM-DD
 
 ## 💰 Totaux en CHF
 Tableau synthétique des 3 scénarios complets (vols + hébergements + transferts).
@@ -214,7 +230,13 @@ Jour par jour : date · lieu · activité/déplacement
 ## 💳 Astuce Revolut Ultra
 Lounge disponible · Opportunité miles (si applicable) · Upgrade estimé en miles et CHF
 
-RÈGLES ABSOLUES : Prix en CHF · Destinations sûres · Max 2 escales · Note hôtel ≥ 8/10 · 4★ minimum · Ne jamais inventer de prix · NE PAS mettre ** dans les tableaux`;
+RÈGLES ABSOLUES :
+- Prix en CHF · Destinations sûres · Max 2 escales · Note hôtel ≥ 8/10 · 4★ minimum
+- Ne jamais inventer de prix — si un prix n'est pas trouvé via web search, écrire "Non trouvé"
+- NE PAS mettre ** dans les tableaux
+- NOMS DE SCÉNARIOS VOLS : utiliser EXACTEMENT "💺 Business", "🔀 Mixte", "🪑 Économie" comme noms. Pas "Premium", "Confort", "Direct économique" ou autre variante
+- VALIDATION PRIX : Avant de soumettre, vérifier que le prix Business > 2x le prix Économie. Sinon corriger
+- LIENS : Toujours des liens de recherche Kayak/Google Flights avec dates, JAMAIS des liens vers la page d'accueil d'une compagnie`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
