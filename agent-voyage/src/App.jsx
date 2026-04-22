@@ -43,6 +43,7 @@ function parseFlightRows(lines){
   // Split by | and filter empties and separator remnants
   const parts=cleaned.split("|").map(c=>c.trim()).filter(c=>c&&!/^[\-\s:]+$/.test(c));
   // Group into rows
+  if(colCount<1)return[];
   const rows=[];for(let i=0;i<parts.length;i+=colCount){const r=parts.slice(i,i+colCount);if(r.length>=3)rows.push(r);}
   return rows;
 }
@@ -486,7 +487,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.2</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v6.4</div>
       <ChatWidget t={t}/>
     </div>
   );
