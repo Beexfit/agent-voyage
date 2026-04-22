@@ -1,317 +1,309 @@
-// Vercel serverless function — appelle l'API Anthropic côté serveur
-// La clé API ne transite jamais côté client
+// Vercel serverless — Sky Scrapper (Skyscanner) flights + Claude assembly
+export const config = { maxDuration: 300 };
 
-export const config = { maxDuration: 60 };
+const RAPID_HOST = 'sky-scrapper.p.rapidapi.com';
+const REVOLUT_AIRLINES = ['EK','EY','AF','KL','BA','SQ','QR','AV']; // 1:1 transfer partners
 
-const SYSTEM_PROMPT = `Tu es un agent expert en planification de voyages de luxe pour un utilisateur basé à Genève, Suisse.
+// ═══════════════════════════════════════════════════════════════
+// SKY SCRAPPER API — Location resolution + Flight search
+// ═══════════════════════════════════════════════════════════════
+async function resolveLocation(query, apiKey) {
+  try {
+    const q = encodeURIComponent(query);
+    const res = await fetch(`https://${RAPID_HOST}/api/v1/flights/searchAirport?query=${q}&locale=en-US`, {
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': RAPID_HOST }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const loc = data?.data?.[0];
+    if (loc) return { skyId: loc.skyId, entityId: loc.entityId, name: loc.presentation?.suggestionTitle || query };
+    return null;
+  } catch { return null; }
+}
 
-PROFIL VOYAGEUR FIXE (ne jamais demander, toujours appliquer) :
-- Aéroports habituels : GVA (Genève-Cointrin) en priorité, ZRH (Zurich) et MXP (Milan-Malpensa) comme alternatives
-- Devise de sortie : CHF — TOUS les prix doivent être convertis en CHF (taux EUR/CHF ≈ 0.923 · USD/CHF ≈ 0.90)
-- Carte Revolut Ultra : cashback en miles transférables, lounge access inclus dans tous les aéroports — voir logique détaillée ci-dessous
-- Contrainte dure : maximum 2 escales par vol
-- TYPOGRAPHIE : utiliser uniquement le tiret simple avec espaces ( - ). Ne jamais utiliser le tiret em (—) ou le tiret en (–) dans aucune réponse.
-- Destinations : sécurisées uniquement — pas de zones à risque
+async function searchFlights({ originSkyId, originEntityId, destSkyId, destEntityId, date, adults, cabin, apiKey }) {
+  try {
+    const params = new URLSearchParams({
+      originSkyId, destinationSkyId: destSkyId,
+      originEntityId, destinationEntityId: destEntityId,
+      date, adults: String(adults || 1),
+      cabinClass: cabin, // economy, premium_economy, business, first
+      currency: 'CHF', market: 'CH', countryCode: 'CH',
+      sortBy: 'best', limit: '10'
+    });
+    const res = await fetch(`https://${RAPID_HOST}/api/v2/flights/searchFlightsWebComplete?${params}`, {
+      headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': RAPID_HOST }
+    });
+    if (!res.ok) { console.error('Sky Scrapper error:', res.status); return []; }
+    const data = await res.json();
+    return parseFlightResults(data);
+  } catch (e) { console.error('searchFlights error:', e.message); return []; }
+}
 
-CRITÈRES HÉBERGEMENT NON-NÉGOCIABLES (éliminer toute option qui ne les respecte pas) :
-✅ Lit double (king size ou queen size)
-✅ Salle de bain privée
-✅ WiFi inclus
-✅ Climatisation
-✅ Note minimum 8.0/10 sur Booking.com ou TripAdvisor
-✅ Minimum 4 étoiles
-Types acceptés : hôtels, appartements entiers Airbnb, boutique hôtels, resorts
+function parseFlightResults(data) {
+  const results = [];
+  const itineraries = data?.data?.itineraries || [];
+  for (const itin of itineraries) {
+    const legs = itin.legs || [];
+    if (!legs.length) continue;
+    const leg = legs[0]; // one-way search = 1 leg
+    const stops = (leg.stopCount ?? leg.segments?.length - 1) || 0;
+    const segments = leg.segments || [];
+    const airlines = [...new Set(segments.map(s => s.marketingCarrier?.alternateId || s.operatingCarrier?.alternateId || ''))].filter(Boolean);
+    const routing = segments.map(s => s.origin?.flightPlaceId || s.origin?.displayCode || '').concat(segments[segments.length - 1]?.destination?.flightPlaceId || segments[segments.length - 1]?.destination?.displayCode || '').filter(Boolean).join('-');
+    const dep = leg.departure?.slice(11, 16) || segments[0]?.departure?.slice(11, 16) || '';
+    const arr = leg.arrival?.slice(11, 16) || segments[segments.length - 1]?.arrival?.slice(11, 16) || '';
+    const durMin = leg.durationInMinutes || 0;
+    const durH = Math.floor(durMin / 60);
+    const durM = durMin % 60;
+    const price = itin.price?.raw || itin.price?.formatted?.replace(/[^\d.]/g, '') || 0;
+    const deepLink = itin.price?.url || itin.deepLink || itin.url || '';
+    const isSelfTransfer = leg.isSelfTransfer || segments.some(s => s.isSelfTransfer) || false;
+    const isRevolutPartner = airlines.some(a => REVOLUT_AIRLINES.includes(a));
 
-═══════════════════════════════════════════════════════════════
-LOGIQUE DE SÉLECTION DES HÉBERGEMENTS — PRIORITÉ STRICTE
-═══════════════════════════════════════════════════════════════
+    results.push({
+      airlines: airlines.join('/'),
+      routing,
+      dep, arr,
+      duration: `${durH}h${durM > 0 ? String(durM).padStart(2, '0') : '00'}`,
+      stops,
+      price: Math.round(parseFloat(price) || 0),
+      deepLink,
+      isSelfTransfer,
+      isRevolutPartner,
+    });
+  }
+  return results;
+}
 
-ÉTAPE 1 - FILTRAGE PAR CRITÈRES (éliminatoire) :
-Éliminer tout hébergement qui ne respecte pas les critères non-négociables ci-dessus.
+// ═══════════════════════════════════════════════════════════════
+// FLIGHT FILTERING — max 1 stop, 2 only if 30%+ cheaper
+// ═══════════════════════════════════════════════════════════════
+function filterFlights(flights) {
+  // Remove self-transfer (baggage re-check)
+  const noSelfTransfer = flights.filter(f => !f.isSelfTransfer);
+  const pool = noSelfTransfer.length > 0 ? noSelfTransfer : flights;
 
-ÉTAPE 2 - CLASSEMENT PAR POSITIONNEMENT (parmi les options restantes) :
-Privilégier dans cet ordre :
-1. Proximité immédiate des activités demandées (plage, centre historique, restaurants, vie nocturne selon l'ambiance choisie)
-2. Quartier sûr, vivant et bien desservi
-3. Accès facile aux transports / aéroport
-4. Environnement cohérent avec l'ambiance du voyage (ex: front de mer pour plage, centre pour ville & culture)
+  // Separate by stops
+  const max1 = pool.filter(f => f.stops <= 1);
+  const has2 = pool.filter(f => f.stops === 2);
 
-ÉTAPE 3 - MEILLEUR PRIX (départage final) :
-Parmi les options bien positionnées, TOUJOURS sélectionner les moins chères en priorité.
-- Ne PAS proposer systématiquement les palaces et hôtels ultra-luxe
-- Chercher activement les hôtels 4-5 étoiles avec le meilleur rapport qualité-prix
-- Pour les séjours longs (7+ nuits), le prix par nuit est critique - privilégier les options abordables
-- Proposer 2 options par destination : une "confort" (meilleur prix) et une "premium" (upgrade possible)
-- L'option "confort" doit être un vrai bon deal, pas juste légèrement moins cher que le premium
+  if (max1.length === 0) {
+    // No 0-1 stop options — allow 2 stops
+    return has2.sort((a, b) => a.price - b.price).slice(0, 5);
+  }
 
-RÈGLE D'OR : Un hôtel 4★ à 120 CHF/nuit avec note 8.5 et bon emplacement est MEILLEUR qu'un palace 5★ à 450 CHF/nuit avec note 9.2 pour la majorité des voyages. Le luxe excessif n'est recommandé que si explicitement demandé.
+  const best1Price = Math.min(...max1.map(f => f.price));
+  // Include 2-stop flights only if 30%+ cheaper
+  const cheap2 = has2.filter(f => f.price < best1Price * 0.7);
 
-═══════════════════════════════════════════════════════════════
+  const combined = [...max1, ...cheap2];
+  // Sort: Revolut partners first at same price range, then by price
+  combined.sort((a, b) => {
+    if (a.isRevolutPartner && !b.isRevolutPartner && a.price <= b.price * 1.1) return -1;
+    if (!a.isRevolutPartner && b.isRevolutPartner && b.price <= a.price * 1.1) return 1;
+    return a.price - b.price;
+  });
 
-SOURCES VOLS À CONSULTER (vérifier prix réels — ne jamais inventer) :
+  return combined.slice(0, 5);
+}
 
-Comparateurs généralistes (priorité) :
-Kayak · Google Flights · Skyscanner · Momondo · Kiwi.com · Jetcost · Liligo · Cheapflights · Opodo · Expedia · Dohop · Jetradar · Hopper · CheapOair · Priceline · FareCompare · Azair (budget Europe)
+// ═══════════════════════════════════════════════════════════════
+// ORCHESTRATION — Search all segments, build markdown
+// ═══════════════════════════════════════════════════════════════
+async function searchAllSegments(legs, travelers, apiKey) {
+  const results = [];
 
-Alertes et deals vols :
-Going (ex-Scott Cheap Flights) · Dollar Flight Club · Secret Flying · Airfarewatchdog · Travelzoo · FareDeals
+  for (const leg of legs) {
+    console.log(`Resolving: ${leg.from} → ${leg.to}`);
+    const origin = await resolveLocation(leg.from, apiKey);
+    const dest = await resolveLocation(leg.to, apiKey);
 
-Business et First Class spécialisés :
-BusinessClass.com · FlyLine · CheapBusiness.com · JustFly · Fly Business Class
+    if (!origin || !dest) {
+      console.error(`Could not resolve: ${leg.from} or ${leg.to}`);
+      results.push({ from: leg.from, to: leg.to, date: leg.date, eco: [], biz: [], error: 'Location not found' });
+      continue;
+    }
 
-Award flights (miles et points) :
-Seats.aero · Point.me · AwardHacker · ExpertFlyer
+    // Search economy
+    const ecoRaw = await searchFlights({
+      originSkyId: origin.skyId, originEntityId: origin.entityId,
+      destSkyId: dest.skyId, destEntityId: dest.entityId,
+      date: leg.date, adults: travelers, cabin: 'economy', apiKey
+    });
 
-Compagnies directes (comparer systématiquement — souvent moins cher en direct) :
-Swiss (swiss.com) · Air France · Lufthansa · British Airways · Emirates · Etihad · Qatar Airways · Singapore Airlines · KLM · Turkish Airlines · Iberia · Delta · United · American Airlines · Ryanair · easyJet · Vueling · Wizz Air · Transavia · Norwegian · Volotea · Jet2
+    // Search business
+    const bizRaw = await searchFlights({
+      originSkyId: origin.skyId, originEntityId: origin.entityId,
+      destSkyId: dest.skyId, destEntityId: dest.entityId,
+      date: leg.date, adults: travelers, cabin: 'business', apiKey
+    });
 
-SOURCES HEBERGEMENTS À CONSULTER (vérifier prix réels — ne jamais inventer) :
+    const eco = filterFlights(ecoRaw);
+    const biz = filterFlights(bizRaw);
 
-Comparateurs généralistes (priorité) :
-Booking.com · Hotels.com · Expedia · Trivago · TripAdvisor · HotelsCombined · Kayak Hotels · Agoda · Priceline · Hotelopia
+    results.push({
+      from: origin.name || leg.from,
+      to: dest.name || leg.to,
+      fromCode: origin.skyId,
+      toCode: dest.skyId,
+      date: leg.date,
+      eco, biz
+    });
+  }
 
-Luxe et boutique spécialisés (seulement si budget le permet) :
-Mr and Mrs Smith · Tablet Hotels · i-escape · Small Luxury Hotels of the World · Design Hotels · Relais et Chateaux · Preferred Hotels · Leading Hotels of the World · Virtuoso
+  return results;
+}
 
-Programmes fidelite (booking direct souvent meilleur tarif) :
-Marriott Bonvoy (W Hotels, St. Regis, Westin, Sheraton) · Hilton Honors (Conrad, Waldorf Astoria) · World of Hyatt (Park Hyatt, Grand Hyatt) · IHG (InterContinental, Kimpton) · Accor ALL (Sofitel, Raffles) · Radisson Rewards
+function buildFlightMD(segments) {
+  let md = '';
+  for (const seg of segments) {
+    md += `\n### ${seg.fromCode || seg.from} vers ${seg.toCode || seg.to} (${seg.date})\n\n`;
 
-Locations et appartements :
-Airbnb · VRBO · HomeToGo · Plum Guide (luxe curated) · OneFineStay · Abritel
+    if (seg.error) {
+      md += `Destination non trouvée. Claude doit chercher les vols via web search.\n`;
+      continue;
+    }
 
-Derniere minute et flash sales :
-HotelTonight · Secret Escapes · Voyage Prive · Jetsetter · Travelzoo
+    md += `| Scénario | Compagnie | Routing | Horaires | Durée | Escales | Prix CHF | Lien |\n|---|---|---|---|---|---|---|---|\n`;
 
----
+    // Best business
+    if (seg.biz.length > 0) {
+      const b = seg.biz[0];
+      md += `| 💺 Business | ${b.airlines} | ${b.routing} | ${b.dep}-${b.arr} | ${b.duration} | ${b.stops} | ${b.price} | [Réserver](${b.deepLink || '#'}) |\n`;
+    }
 
-💳 PROGRAMMES DE FIDÉLITÉ ET MILES - LOGIQUE COMPLÈTE
+    // Mixte: eco on short, biz on long (or avg price)
+    if (seg.eco.length > 0 && seg.biz.length > 0) {
+      const e = seg.eco[0];
+      const mixPrice = Math.round((e.price + seg.biz[0].price) / 2);
+      md += `| 🔀 Mixte | ${e.airlines} | ${e.routing} | ${e.dep}-${e.arr} | ${e.duration} | ${e.stops} | ${mixPrice} | [Réserver](${e.deepLink || '#'}) |\n`;
+    }
 
-L'utilisateur peut indiquer ses programmes actifs et ses points disponibles dans sa demande.
-Si des programmes sont mentionnés, appliquer la logique correspondante pour chaque programme.
+    // Best economy
+    if (seg.eco.length > 0) {
+      const e = seg.eco[0];
+      md += `| 🪑 Économie | ${e.airlines} | ${e.routing} | ${e.dep}-${e.arr} | ${e.duration} | ${e.stops} | ${e.price} | [Réserver](${e.deepLink || '#'}) |\n`;
+    }
 
-RÉFÉRENTIEL DES PROGRAMMES ET CONVERSIONS :
+    // Alternative options
+    const altEco = seg.eco.slice(1, 4);
+    const altBiz = seg.biz.slice(1, 3);
+    if (altEco.length > 0) {
+      md += `\nAutres options économie :\n`;
+      for (const o of altEco) md += `- ${o.airlines} ${o.routing} ${o.dep}-${o.arr} ${o.duration} ${o.stops}esc. ${o.price} CHF${o.isRevolutPartner ? ' (Revolut Ultra partner)' : ''} [Voir](${o.deepLink || '#'})\n`;
+    }
+    if (altBiz.length > 0) {
+      md += `\nAutres options business :\n`;
+      for (const o of altBiz) md += `- ${o.airlines} ${o.routing} ${o.dep}-${o.arr} ${o.duration} ${o.stops}esc. ${o.price} CHF${o.isRevolutPartner ? ' (Revolut Ultra partner)' : ''} [Voir](${o.deepLink || '#'})\n`;
+    }
+  }
+  return md;
+}
 
-1. REVOLUT ULTRA
-   Avantages : Lounge access partout, cashback en miles transférables
-   Transferts favorables (1:1) : Emirates (EK), Etihad (EY), Air France/KLM (AF/KL), British Airways (BA), Singapore Airlines (SQ), Avianca (AV), Qatar Airways (QR)
-   Transferts défavorables (2:1 ou plus) : Lufthansa/Swiss Miles & More (LH/LX), Turkish (TK)
-   Valeur approximative : 1 point = 0.01 CHF
+// ═══════════════════════════════════════════════════════════════
+// CLAUDE PROMPT
+// ═══════════════════════════════════════════════════════════════
+const SYSTEM_PROMPT = `Tu es un agent expert en planification de voyages pour un utilisateur basé à Genève, Suisse.
 
-2. AMERICAN EXPRESS (Membership Rewards - CH)
-   Avantages : Centurion Lounge, travel credits, hotel upgrades sur partenaires
-   Transferts aériens (1:1) : Air France/KLM Flying Blue, British Airways Avios, Emirates Skywards, Singapore KrisFlyer, Delta SkyMiles, Avianca LifeMiles, Cathay Pacific Asia Miles, Aeroplan Air Canada
-   Transferts hôtels : Marriott Bonvoy (1:1.2), Hilton Honors (1:2)
-   Valeur approximative : 1 point = 0.015-0.02 CHF selon usage
+PROFIL : GVA/ZRH/MXP - CHF (EUR 0.923, USD 0.90) - Revolut Ultra - Destinations sûres
 
-3. UBS VISA INFINITE
-   Avantages : Priority Pass lounge, assurances voyage premium
-   Transferts : via Miles & More (ratio 1.5 pts UBS = 1 mile). Défavorable pour autres compagnies.
-   Usage optimal : vols Lufthansa Group (Swiss, Austrian, Brussels, Eurowings)
-   Valeur approximative : 1 point = 0.008 CHF
+VOLS : Des données RÉELLES avec prix vérifiés et liens de réservation directs (Skyscanner) te sont fournies.
+- Utilise ces données EXACTEMENT - ne modifie PAS les prix, compagnies, ni liens
+- Si aucune donnée vol fournie pour un segment, cherche via web search
+- Compare avec Kayak, Opodo, Google Flights via web search pour vérifier s'il existe un meilleur prix
+- Si tu trouves un prix significativement meilleur ailleurs (>10% moins cher), mentionne-le avec le lien
+- Calcule aussi le coût en points/miles si le voyageur a indiqué ses programmes de fidélité et points dispo
+- Privilégie les compagnies partenaires Revolut Ultra (Emirates, Etihad, AF/KLM, BA, Singapore, Qatar) à prix égal
 
-4. MILES & MORE (Swiss / Lufthansa Group)
-   Avantages : Miles sur LH, LX, OS, SN, EW. Accès HON Circle lounges avec statut.
-   Upgrades : disponibles sur Lufthansa Group uniquement. Nécessite souvent 2x le prix en miles vs éco.
-   Partenaires hôtels : Marriott, Hilton. Partenaires voiture : Hertz, Sixt.
-   Valeur approximative : 1 mile = 0.01-0.015 CHF
+HÉBERGEMENTS - sélection stricte via web search :
+Critères : Lit double - SdB privée - WiFi - Clim - Note >= 8.0/10 - 4 étoiles minimum
+Priorité : 1) Critères 2) Positionnement (proximité activités) 3) Meilleur prix
+2 options/destination : "confort" (meilleur prix) + "premium"
+Lien Booking : https://www.booking.com/searchresults.html?ss=NOM+HOTEL+VILLE
 
-5. MARRIOTT BONVOY
-   Avantages : Séjours gratuits dans 9000+ hôtels Marriott/Westin/W/Sheraton/St. Regis/Ritz-Carlton
-   Transferts aériens : 3 points = 1 mile + bonus 5000 miles par tranche de 60000 points transférés
-   Partenaires : 40+ compagnies incluant AF/KLM, BA, Emirates, United, Delta, Singapore
-   Usage optimal : conserver pour séjours hôtel - transferts aériens peu avantageux sauf bonus
-   Valeur approximative : 1 point = 0.006-0.009 CHF
-
-6. HILTON HONORS
-   Avantages : Séjours dans 7000+ hôtels Hilton/Conrad/Waldorf Astoria/Curio Collection
-   Transferts aériens : très défavorables (10 points = 1.5 miles). NE PAS recommander de transferts.
-   Usage optimal : uniquement pour séjours dans propriétés Hilton
-   Valeur approximative : 1 point = 0.004-0.006 CHF
-
-7. WORLD OF HYATT
-   Avantages : Séjours dans Park Hyatt, Grand Hyatt, Andaz, Alila, Thompson Hotels
-   Transferts aériens : aucun partenaire direct. Conserver exclusivement pour séjours Hyatt.
-   Partenariats : Chase Ultimate Rewards (transfert 1:1), American Airlines (1:1)
-   Valeur approximative : 1 point = 0.017-0.025 CHF (programme le plus généreux par point)
-
-8. DINERS CLUB
-   Avantages : Diners Club Lounges, réseau global d'acceptation en croissance
-   Transferts : 1:1 vers plusieurs programmes (vérifier partenaires actuels)
-   Valeur approximative : 1 point = 0.01 CHF
-
-DÉMARCHE DE DÉCISION POUR LES PROGRAMMES ACTIFS :
-
-Pour chaque programme mentionné par l'utilisateur :
-1. Identifier si des compagnies partenaires opèrent sur les routes demandées
-2. Si oui et ratio favorable : calculer le coût réel (billet éco + valeur des miles utilisés en CHF)
-3. Comparer avec le prix business direct
-4. Si l'option est avantageuse (>20% d'économie) : la proposer clairement
-5. Si défavorable ou incertain : mentionner brièvement et passer à la recommandation classique
-
-RÈGLE ABSOLUE : Ne jamais recommander un transfert de points si le ratio est défavorable ou inconnu.
-
-DANS LA SECTION "💳 Astuce Fidélité" DU RÉSULTAT :
-  - Lounge disponible : préciser quel lounge dans quel aéroport pour chaque programme actif
-  - Opportunité miles/points : si avantage calculé, afficher : compagnie + miles nécessaires + coût CHF + économie vs tarif plein
-  - Si aucune opportunité : l'indiquer clairement et passer à la recommandation classique
-  - Recommandation hôtel : si Marriott Bonvoy ou Hilton Honors actif, proposer les propriétés du groupe en priorité
-
----
-
-FORMAT DE RÉPONSE OBLIGATOIRE — respecter exactement cette structure :
-
+FORMAT :
 ## 📋 Récapitulatif
-Tableau : dates · destinations · durées de séjour · nombre de voyageurs
-IMPORTANT : Toujours indiquer le nombre EXACT de nuits (ex: "9 nuits" pas "10+ nuits" ni "environ 10 nuits"). Calculer précisément à partir des dates.
+Tableau dates/destinations/nuits EXACTES/voyageurs. Pas de ligne Total.
 
 ## ✈️ Vols
-Pour CHAQUE segment de vol, créer un ### séparé avec son propre tableau de 3 scénarios :
-### Segment 1 : Ville A vers Ville B (date)
-| Scénario | Compagnie | Routing | Durée | Escales | Prix/pers CHF | Lien |
-NE PAS combiner tous les segments dans un seul tableau.
-NE PAS mettre ** (markdown bold) dans les cellules de tableau.
-
-RÈGLES DE PRIX VOLS CRITIQUES :
-- Les 3 scénarios DOIVENT être : "💺 Business" (vraie classe business), "🔀 Mixte" (éco sur court-courrier + business sur long-courrier), "🪑 Économie" (tout en éco)
-- TOUJOURS chercher les vrais prix via web search — ne jamais estimer ou inventer
-- Si un prix business semble très proche du prix éco, VÉRIFIER en cherchant spécifiquement "business class [route] price" — c'est peut-être une vraie promo, ou une erreur
-- Si le prix trouvé est confirmé bas, le garder tel quel — ne pas rejeter les bonnes affaires
-- Si aucun prix business trouvé malgré les recherches, mettre le lien Kayak avec filtre business pour que l'utilisateur puisse vérifier lui-même
-
-LIENS VOLS OBLIGATOIRES :
-- Générer des liens Kayak avec dates préremplies au format : https://www.kayak.com/flights/CODE_DEPART-CODE_ARRIVEE/YYYY-MM-DD?sort=bestflight_a&fs=cabin=b (pour business) ou cabin=e (pour éco)
-- Exemple : https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a&fs=cabin=e
-- NE JAMAIS mettre un lien vers la page d'accueil d'une compagnie (swiss.com, airfrance.com). Toujours un lien de RECHERCHE avec les dates.
+Reprendre les données Skyscanner. Un ### par segment. Pas de ** dans les cellules.
+Si meilleur prix trouvé ailleurs, ajouter une note sous le tableau.
 
 ## 🏨 Hébergements
-Par destination, minimum 2 options : une "confort" (meilleur prix) et une "premium".
-Pour chaque hôtel, présenter dans cet ordre exact :
-
-### Ville (dates)
-#### [Nom exact de l'hôtel]
-IMAGES: [url_photo_1] | [url_photo_2] | [url_photo_3]
-(Chercher via web search les URLs directes des photos de l'hôtel sur Booking.com CDN (cf.bstatic.com), TripAdvisor, Hotels.com ou site officiel. Mettre 2-4 URLs séparées par | . Si aucune image trouvée, NE PAS écrire la ligne IMAGES.)
-
-Tableau de détails :
-| Critère | Détail |
-|---|---|
-| Étoiles | ★★★★★ |
-| Note | X.X/10 (source) |
-| Zone | Quartier, position |
-| Chambre | Type, superficie |
-| Équipements | Liste complète |
-| Petit-déjeuner | Inclus / En option / Non |
-| Piscine | Oui/Non + détails |
-| Spa | Oui/Non + détails |
-| Vue | Vue mer/ville/jardin |
-| Prix/nuit | XXX CHF |
-| Prix total | XXX CHF (X nuits) |
-| Lien | [Booking.com](url_recherche_booking) · [Site officiel](url_site) |
-
-Pour les liens Booking.com, utiliser le format : https://www.booking.com/searchresults.html?ss=NOM+HOTEL+VILLE
-Pour les liens Kayak Hotels : https://www.kayak.com/hotels/NOM-HOTEL-VILLE/YYYY-MM-DD/YYYY-MM-DD
+### Ville (dates) puis #### Hotel. IMAGES si trouvées. Tableau KV complet.
 
 ## 💰 Totaux en CHF
-Tableau synthétique des 3 scénarios complets (vols + hébergements + transferts).
-NE PAS mettre ** dans les cellules.
-| Scénario | Vols CHF | Hébergements CHF | Transferts CHF | TOTAL CHF |
+3 scénarios. Pas de ** dans les cellules.
 
 ## 🌤️ Météo
-Par destination, utiliser ### Ville (Mois) comme sous-titre.
-Conditions attendues pendant chaque séjour (températures, pluie, humidité)
+### Ville (Mois)
 
 ## 💡 Recommandation
-Option recommandée avec justification claire (rapport qualité/prix, confort, dépaysement)
 
 ## 📅 Calendrier
-Jour par jour : date · lieu · activité/déplacement
+Jour par jour
 
 ## 💳 Astuce Revolut Ultra
-Lounge disponible · Opportunité miles (si applicable) · Upgrade estimé en miles et CHF
+Lounges - Miles/points - Upgrades`;
 
-RÈGLES ABSOLUES :
-- Prix en CHF · Destinations sûres · Max 2 escales · Note hôtel ≥ 8/10 · 4★ minimum
-- Ne jamais inventer de prix — chercher via web search. Si introuvable, fournir un lien Kayak pour vérification
-- NE PAS mettre ** dans les tableaux
-- NOMS DE SCÉNARIOS VOLS : utiliser EXACTEMENT "💺 Business", "🔀 Mixte", "🪑 Économie" comme noms. Pas "Premium", "Confort", "Direct économique" ou autre variante
-- LIENS : Toujours des liens de recherche Kayak/Google Flights avec dates, JAMAIS des liens vers la page d'accueil d'une compagnie`;
-
+// ═══════════════════════════════════════════════════════════════
+// HANDLER
+// ═══════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "ANTHROPIC_API_KEY non configurée. Ajoute-la dans les variables d'environnement Vercel."
-    });
-  }
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY manquante.' });
 
-  const { messages } = req.body;
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'messages requis' });
-  }
-
-  let allMessages = [...messages];
-  let finalText = '';
+  const { messages, legs, travelers } = req.body;
+  if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages requis' });
 
   try {
-    for (let turn = 0; turn < 5; turn++) {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 6000,
-          system: SYSTEM_PROMPT,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: allMessages,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        return res.status(500).json({ error: data.error.message });
-      }
-
-      const texts = (data.content || [])
-        .filter((b) => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n');
-
-      if (texts) finalText = texts;
-
-      if (data.stop_reason === 'end_turn') break;
-
-      if (data.stop_reason === 'tool_use') {
-        allMessages.push({ role: 'assistant', content: data.content });
-        const uses = (data.content || []).filter((b) => b.type === 'tool_use');
-        if (!uses.length) break;
-        allMessages.push({
-          role: 'user',
-          content: uses.map((u) => ({
-            type: 'tool_result',
-            tool_use_id: u.id,
-            content: 'Search completed.',
-          })),
-        });
-      } else {
-        break;
-      }
+    // ── 1. Search flights via Sky Scrapper ──
+    let flightMD = '';
+    const rapidKey = process.env.RAPIDAPI_KEY;
+    if (rapidKey && legs && legs.length > 0) {
+      console.log(`Searching ${legs.length} segments via Sky Scrapper...`);
+      const segments = await searchAllSegments(legs, travelers || 1, rapidKey);
+      flightMD = buildFlightMD(segments);
+      console.log('Flight search complete.');
     }
 
-    return res.status(200).json({ text: finalText || 'Aucun résultat retourné.' });
+    // ── 2. Build prompt with real flight data ──
+    let content = messages[0]?.content || '';
+    if (flightMD) {
+      content += `\n\n═══ VOLS SKYSCANNER - PRIX RÉELS ET LIENS DIRECTS ═══${flightMD}\n═══ FIN DONNÉES VOLS ═══\nIntègre ces vols. Compare avec Kayak/Opodo/Google Flights si possible. Affiche le meilleur prix trouvé.`;
+    }
+
+    // ── 3. Claude assembly (hotels, weather, calendar, points) ──
+    let allMsgs = [{ role: 'user', content }];
+    let finalText = '';
+    for (let turn = 0; turn < 5; turn++) {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 6000, system: SYSTEM_PROMPT, tools: [{ type: 'web_search_20250305', name: 'web_search' }], messages: allMsgs }),
+      });
+      const data = await r.json();
+      if (data.error) return res.status(500).json({ error: data.error.message });
+      const texts = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+      if (texts) finalText = texts;
+      if (data.stop_reason === 'end_turn') break;
+      if (data.stop_reason === 'tool_use') {
+        allMsgs.push({ role: 'assistant', content: data.content });
+        const uses = (data.content || []).filter(b => b.type === 'tool_use');
+        if (!uses.length) break;
+        allMsgs.push({ role: 'user', content: uses.map(u => ({ type: 'tool_result', tool_use_id: u.id, content: 'Search completed.' })) });
+      } else break;
+    }
+    return res.status(200).json({ text: finalText || 'Aucun résultat.' });
   } catch (err) {
-    console.error('Erreur API Anthropic:', err);
+    console.error('Erreur:', err);
     return res.status(500).json({ error: err.message });
   }
 }
