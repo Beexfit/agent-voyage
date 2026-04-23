@@ -82,7 +82,7 @@ function RecapDisplay({lines,t}){
     if(/personne|voyag/i.test(all)){const m=all.match(/(\d+)\s*personne/i)||all.match(/(\d+)\s*voyag/i);if(m)voy=m[1];}
   }
   // Also check header row for column-based format
-  if(!nights&&rows[0]){const hdr=rows[0];for(let i=0;i<hdr.length;i++){if(/dur|nuit/i.test(hdr[i])){for(const r of data){const nm=(r[i]||"").match(/(\d+)/);if(nm)nights+=parseInt(nm[1])||0;}}if(/voyag|pers/i.test(hdr[i])){for(const r of data){const m=(r[i]||"").match(/(\d+)/);if(m)voy=m[1];}}}}
+  if(!nights&&rows[0]){const hdr=rows[0];for(let i=0;i<hdr.length;i++){if(/dur|nuit/i.test(hdr[i])){for(const r of data){if(/total|sous-total|retour/i.test(r[0]||""))continue;const nm=(r[i]||"").match(/(\d+)/);if(nm)nights+=parseInt(nm[1])||0;}}if(/voyag|pers/i.test(hdr[i])){for(const r of data){const m=(r[i]||"").match(/(\d+)/);if(m)voy=m[1];}}}}
   // Last resort: search ALL raw lines for "X nuits"
   if(!nights){for(const l of lines){const m=l.match(/(\d+)\+?\s*nuit/gi);if(m)m.forEach(x=>{const n=parseInt(x);if(!isNaN(n))nights+=n;});}}
   return(<div>
@@ -106,47 +106,53 @@ function FlightDisplay({lines,t}){
   for(const l of lines){const h=l.match(/^###\s+(.+)/);if(h){if(cur)vols.push(cur);cur={title:h[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);else if(!cur){cur={title:"",lines:[]};cur.lines.push(l);}}
   if(cur)vols.push(cur);
 
-  // Parse each vol section — detect if table is transposed and pivot if needed
+  // Parse each vol section — normalize columns to standard format
   for(const vol of vols){
     const rows=parseRows(vol.lines);
-    if(rows.length<2){vol.rows=[];continue;}
-    // Check if transposed: first column has labels like "Compagnie","Prix","Durée"
+    if(rows.length<2){vol.rows=[];vol.hasSc=false;continue;}
+    // Check if transposed
     const firstCol=rows.slice(1).map(r=>(r[0]||"").toLowerCase().replace(/\*\*/g,""));
     const isTransposed=firstCol.filter(c=>/compag|prix|durée|duree|type|escale|réserv|lien|horaire/i.test(c)).length>=2;
     if(isTransposed){
-      // Pivot: columns become rows
-      const headers=rows[0].slice(1);// skip "Détail" column
-      const pivoted=[];
-      for(let c=0;c<headers.length;c++){
-        const row=[headers[c]];
-        for(let r=1;r<rows.length;r++){row.push((rows[r][c+1]||"").replace(/\*\*/g,""));}
-        pivoted.push(row);
-      }
-      // Map pivoted: row[0]=scenario name, find compagnie/prix/durée/escales/lien by label
+      const headers=rows[0].slice(1);
       const labels=rows.slice(1).map(r=>(r[0]||"").toLowerCase().replace(/\*\*/g,""));
       const gi=k=>labels.findIndex(l=>k.test(l));
-      const iAir=gi(/compag/i),iPrix=gi(/prix/i),iDur=gi(/durée|duree/i),iEsc=gi(/escale|type|stop/i),iLink=gi(/réserv|lien|link/i);
-      vol.rows=pivoted.map(p=>{
-        const scenario=p[0]||"";
-        const airline=iAir>=0?(p[iAir+1]||""):"";
-        const prix=iPrix>=0?(p[iPrix+1]||"0"):"0";
-        const duree=iDur>=0?(p[iDur+1]||""):"";
-        const escales=iEsc>=0?(p[iEsc+1]||"0"):"0";
-        const lien=iLink>=0?(p[iLink+1]||""):"";
-        return[scenario,airline,"",duree,escales,prix,lien];
+      const iA=gi(/compag/i),iP=gi(/prix/i),iD=gi(/durée|duree/i),iE=gi(/escale|type|stop/i),iL=gi(/réserv|lien/i);
+      vol.rows=headers.map((_,c)=>{
+        const sc=headers[c]||"";const air=iA>=0?(rows[iA+1][c+1]||"").replace(/\*\*/g,""):"";
+        const prix=iP>=0?(rows[iP+1][c+1]||"").replace(/\*\*/g,""):"";const dur=iD>=0?(rows[iD+1][c+1]||"").replace(/\*\*/g,""):"";
+        const esc=iE>=0?(rows[iE+1][c+1]||"").replace(/\*\*/g,""):"0";const lnk=iL>=0?(rows[iL+1][c+1]||""):"";
+        return[sc,air,"",dur,esc,prix,lnk];
       });
+      vol.hasSc=true;
     } else {
-      vol.rows=rows.slice(1);// skip header
+      // Detect columns from header
+      const hdr=rows[0].map(h=>h.toLowerCase());
+      const fi=patterns=>hdr.findIndex(h=>patterns.some(p=>p.test(h)));
+      const iSc=fi([/scén|option/i]),iAir=fi([/compag|airline/i]),iRt=fi([/rout|itin/i]);
+      const iDep=fi([/départ|depart/i]),iArr=fi([/arriv/i]),iDur=fi([/durée|duree|duration/i]);
+      const iEsc=fi([/escale|stop/i]),iPx=fi([/prix|price|chf/i]),iLk=fi([/lien|link|réserv|book/i]);
+      vol.hasSc=iSc>=0;
+      vol.rows=rows.slice(1).map(r=>{
+        const sc=iSc>=0?(r[iSc]||""):"";
+        const air=iAir>=0?(r[iAir]||""):(iSc>=0?(r[1]||""):(r[0]||""));
+        const dep=iDep>=0?(r[iDep]||""):"";const arr=iArr>=0?(r[iArr]||""):"";
+        const rt=iRt>=0?(r[iRt]||""):(dep&&arr?`${dep} → ${arr}`:"");
+        const dur=iDur>=0?(r[iDur]||""):"";const esc=iEsc>=0?(r[iEsc]||""):"0";
+        const prix=iPx>=0?(r[iPx]||""):"0";const lnk=iLk>=0?(r[iLk]||""):"";
+        return[sc,air,rt,dur,esc,prix,lnk];
+      });
     }
   }
 
   const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=(/business|premium|first|💺/i.test(s))&&!/éco|eco|mix|🔀|confort/i.test(s);const isMix=/mixte|mix|confort|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
   const tabs=[{id:"business",l:"Business"},{id:"mixte",l:"Mixte"},{id:"eco",l:"Économie"}];
+  const anySc=vols.some(v=>v.hasSc);
 
   return(<div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.l}</button>)}</div>
+    {anySc&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.l}</button>)}</div>}
     {vols.filter(v=>v.rows.length>0).map((vol,vi)=>{
-      const filtered=vol.rows.filter(r=>match(r[0]||"",cls));
+      const filtered=vol.hasSc?vol.rows.filter(r=>match(r[0]||"",cls)):vol.rows;
       if(!filtered.length)return<div key={vi} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:20,marginBottom:12,textAlign:"center"}}>{vol.title&&<div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>{vol.title}</div>}<div style={{color:t.muted,fontSize:13}}>Pas de vol dans cette classe</div></div>;
       return(<div key={vi} style={{marginBottom:16}}>
         {vol.title&&<div style={{padding:"12px 18px",background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:"12px 12px 0 0"}}><span style={{fontSize:12,fontWeight:800,color:t.gold,letterSpacing:"0.06em"}}>{vol.title}</span></div>}
@@ -161,17 +167,17 @@ function FlightDisplay({lines,t}){
           const esc=parseInt(String(escales).replace(/[^\d]/g,""))||0;
           return(<div key={ri} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:vol.title?(ri===filtered.length-1?"0 0 12px 12px":"0"):"12px",padding:"20px",borderTop:vol.title||ri>0?"none":undefined}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,flexWrap:"wrap",gap:8}}>
-              <div><div style={{fontSize:16,fontWeight:800,color:t.text}}>{compagnie}</div>{depArr&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>{depArr}</div>}</div>
+              <div><div style={{fontSize:16,fontWeight:800,color:t.text}}>{compagnie}</div><div style={{fontSize:11,color:t.muted,marginTop:2}}>{depArr}</div></div>
               <div style={{textAlign:"right"}}><div style={{fontSize:24,fontWeight:900,color:t.gold,fontFamily:MO}}>{fmt(prix)}</div><div style={{fontSize:11,color:t.muted}}>CHF / pers</div></div>
             </div>
-            {airports.length>=2&&<div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"16px 20px",marginBottom:14}}>
+            <div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"16px 20px",marginBottom:14}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{airports[0]}</div>
+                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{airports[0]||""}</div>
                 <div style={{flex:1,display:"flex",alignItems:"center",margin:"0 12px"}}><div style={{flex:1,height:1,background:t.border}}/>{esc>0&&<div style={{padding:"2px 10px",borderRadius:20,background:t.goldBg2,border:`1px solid ${t.gold}40`,fontSize:10,fontWeight:600,color:t.gold,margin:"0 8px",whiteSpace:"nowrap"}}>{esc} escale{esc>1?"s":""}</div>}<div style={{flex:1,height:1,background:t.border}}/></div>
-                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{airports[airports.length-1]}</div>
+                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{airports[airports.length-1]||""}</div>
               </div>
               <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11,color:t.muted}}>{routing}</span><span style={{fontSize:12,fontWeight:600,color:t.text}}>⏱ {duree}</span></div>
-            </div>}
+            </div>
             {linkM&&<a href={linkM[2]} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"10px 20px",background:t.gold,color:"#0a0a0a",borderRadius:10,fontSize:13,fontWeight:700,textDecoration:"none"}}>{linkM[1]} ↗</a>}
           </div>);
         })}
@@ -276,7 +282,7 @@ function TotauxDisplay({lines,t}){
   if(!data.length)return null;const active=data[idx]||data[0];
   const rawTotal=String(active[active.length-1]||"0").replace(/\*\*/g,"").replace(/['\s,CHFchf]/g,"");
   const totalVal=parseInt(rawTotal)||0;
-  const actEst=Math.round(totalVal*0.12/100)*100;
+  const actEst=0; // removed: was arbitrary 12% estimate
   // Parse individual cost columns (skip scenario name and total)
   const costs=[];
   if(header)for(let i=1;i<header.length-1;i++){const val=active[i]||"";if(val){const clean=String(val).replace(/\*\*/g,"");const num=parseInt(clean.replace(/[^\d]/g,""))||0;const detail=clean.match(/\(([^)]+)\)/)?.[1]||"";costs.push({label:header[i].replace(/\*\*/g,""),value:num,detail,raw:clean});}}
@@ -532,7 +538,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.4</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.5</div>
       <ChatWidget t={t}/>
     </div>
   );
