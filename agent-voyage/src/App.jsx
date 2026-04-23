@@ -98,98 +98,85 @@ function RecapDisplay({lines,t}){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FLIGHTS — ### Vol N headers, dynamic column detection
+// FLIGHTS — ### Vol N headers, parseRows, class tabs
 // ═══════════════════════════════════════════════════════════════
 function FlightDisplay({lines,t}){
   const[cls,setCls]=useState("eco");
-  // Split by ### Vol headers
   const vols=[];let cur=null;
-  for(const l of lines){const s=l.trimStart();const h=s.match(/^###\s+(.+)/);if(h){if(cur)vols.push(cur);cur={title:h[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);else{if(!cur){cur={title:"",lines:[]};}cur.lines.push(l);}}
+  for(const l of lines){const h=l.match(/^###\s+(.+)/);if(h){if(cur)vols.push(cur);cur={title:h[1].trim(),lines:[]};}else if(cur)cur.lines.push(l);else if(!cur){cur={title:"",lines:[]};cur.lines.push(l);}}
   if(cur)vols.push(cur);
 
-  // Parse each vol section with dynamic column mapping
+  // Parse each vol section — detect if table is transposed and pivot if needed
   for(const vol of vols){
     const rows=parseRows(vol.lines);
-    if(rows.length<2){vol.flights=[];continue;}
-    // Detect columns from header
-    const hdr=rows[0].map(h=>h.toLowerCase());
-    const ci={};
-    hdr.forEach((h,i)=>{
-      if(/scén|option/i.test(h))ci.scenario=i;
-      if(/compag|airline/i.test(h))ci.airline=i;
-      if(/routing|route|itin/i.test(h))ci.routing=i;
-      if(/départ|depart/i.test(h))ci.dep=i;
-      if(/arriv/i.test(h))ci.arr=i;
-      if(/durée|duree|duration/i.test(h))ci.duration=i;
-      if(/escale|stop/i.test(h))ci.stops=i;
-      if(/prix|price|chf/i.test(h))ci.price=i;
-      if(/lien|link|réserv|book/i.test(h))ci.link=i;
-    });
-    // Fallback: if no scenario column, first col is airline
-    if(ci.airline===undefined)ci.airline=ci.scenario!==undefined?1:0;
-    if(ci.price===undefined){
-      // Find price column: look for column with CHF or numbers
-      for(let i=hdr.length-1;i>=0;i--){if(/prix|chf|price/i.test(hdr[i])){ci.price=i;break;}}
-      if(ci.price===undefined)ci.price=hdr.length-2; // second to last
+    if(rows.length<2){vol.rows=[];continue;}
+    // Check if transposed: first column has labels like "Compagnie","Prix","Durée"
+    const firstCol=rows.slice(1).map(r=>(r[0]||"").toLowerCase().replace(/\*\*/g,""));
+    const isTransposed=firstCol.filter(c=>/compag|prix|durée|duree|type|escale|réserv|lien|horaire/i.test(c)).length>=2;
+    if(isTransposed){
+      // Pivot: columns become rows
+      const headers=rows[0].slice(1);// skip "Détail" column
+      const pivoted=[];
+      for(let c=0;c<headers.length;c++){
+        const row=[headers[c]];
+        for(let r=1;r<rows.length;r++){row.push((rows[r][c+1]||"").replace(/\*\*/g,""));}
+        pivoted.push(row);
+      }
+      // Map pivoted: row[0]=scenario name, find compagnie/prix/durée/escales/lien by label
+      const labels=rows.slice(1).map(r=>(r[0]||"").toLowerCase().replace(/\*\*/g,""));
+      const gi=k=>labels.findIndex(l=>k.test(l));
+      const iAir=gi(/compag/i),iPrix=gi(/prix/i),iDur=gi(/durée|duree/i),iEsc=gi(/escale|type|stop/i),iLink=gi(/réserv|lien|link/i);
+      vol.rows=pivoted.map(p=>{
+        const scenario=p[0]||"";
+        const airline=iAir>=0?(p[iAir+1]||""):"";
+        const prix=iPrix>=0?(p[iPrix+1]||"0"):"0";
+        const duree=iDur>=0?(p[iDur+1]||""):"";
+        const escales=iEsc>=0?(p[iEsc+1]||"0"):"0";
+        const lien=iLink>=0?(p[iLink+1]||""):"";
+        return[scenario,airline,"",duree,escales,prix,lien];
+      });
+    } else {
+      vol.rows=rows.slice(1);// skip header
     }
-    if(ci.duration===undefined){for(let i=0;i<hdr.length;i++){if(/dur/i.test(hdr[i])){ci.duration=i;break;}}}
-    if(ci.link===undefined)ci.link=hdr.length-1;
-
-    vol.flights=rows.slice(1).map(r=>{
-      const scenario=ci.scenario!==undefined?(r[ci.scenario]||""):"";
-      const airline=r[ci.airline]||"";
-      const routing=ci.routing!==undefined?(r[ci.routing]||""):"";
-      const dep=ci.dep!==undefined?(r[ci.dep]||""):"";
-      const arr=ci.arr!==undefined?(r[ci.arr]||""):"";
-      const depArr=dep&&arr?`${dep} - ${arr}`:"";
-      const duration=ci.duration!==undefined?(r[ci.duration]||""):"";
-      const stops=ci.stops!==undefined?(r[ci.stops]||"0"):"0";
-      const priceRaw=ci.price!==undefined?(r[ci.price]||"0"):"0";
-      const linkCell=r[ci.link]||"";
-      const linkM=linkCell.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      // Build routing from dep/arr if no routing column
-      const routeStr=routing||(dep&&arr?`${dep.split(" ")[0]||""}-${arr.split(" ")[0]||""}`:"");
-      const airports=routeStr.split(/[-→>]/).map(s=>s.trim()).filter(Boolean);
-      const esc=parseInt(String(stops).replace(/[^\d]/g,""))||0;
-      return{scenario,airline,routing:routeStr,depArr,duration,stops:esc,price:priceRaw,linkM,airports};
-    });
-    // Detect if scenarios exist
-    vol.hasScenarios=ci.scenario!==undefined&&vol.flights.some(f=>/business|premium|first|💺|mixte|🔀|économie|🪑|confort/i.test(f.scenario));
   }
 
   const match=(scenario,c)=>{const s=(scenario||"").toLowerCase();const isBiz=(/business|premium|first|💺/i.test(s))&&!/éco|eco|mix|🔀|confort/i.test(s);const isMix=/mixte|mix|confort|🔀|éco.*biz|biz.*retour/i.test(s);if(c==="business")return isBiz;if(c==="mixte")return isMix;return!isBiz&&!isMix;};
   const tabs=[{id:"business",l:"Business"},{id:"mixte",l:"Mixte"},{id:"eco",l:"Économie"}];
-  // Check if ANY vol has scenarios
-  const anyScenarios=vols.some(v=>v.hasScenarios);
 
   return(<div>
-    {anyScenarios&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.l}</button>)}</div>}
-    {vols.filter(v=>(v.flights||[]).length>0).map((vol,vi)=>{
-      const flights=vol.hasScenarios?(vol.flights||[]).filter(f=>match(f.scenario,cls)):(vol.flights||[]);
-      if(!flights.length&&vol.hasScenarios)return<div key={vi} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:20,marginBottom:12,textAlign:"center"}}>{vol.title&&<div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>{vol.title}</div>}<div style={{color:t.muted,fontSize:13}}>Pas de vol dans cette classe</div></div>;
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderRadius:12,overflow:"hidden",border:`1px solid ${t.border}`,marginBottom:20}}>{tabs.map((tab,i)=><button key={tab.id} onClick={()=>setCls(tab.id)} style={{padding:"14px 8px",textAlign:"center",background:cls===tab.id?t.goldBg2:t.card2,color:cls===tab.id?t.gold:t.muted,border:"none",borderBottom:cls===tab.id?`2px solid ${t.gold}`:"2px solid transparent",borderLeft:i>0?`1px solid ${t.border}`:"none",cursor:"pointer",fontFamily:FN,fontSize:12,fontWeight:700}}>{tab.l}</button>)}</div>
+    {vols.filter(v=>v.rows.length>0).map((vol,vi)=>{
+      const filtered=vol.rows.filter(r=>match(r[0]||"",cls));
+      if(!filtered.length)return<div key={vi} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:12,padding:20,marginBottom:12,textAlign:"center"}}>{vol.title&&<div style={{fontSize:12,fontWeight:700,color:t.gold,marginBottom:8}}>{vol.title}</div>}<div style={{color:t.muted,fontSize:13}}>Pas de vol dans cette classe</div></div>;
       return(<div key={vi} style={{marginBottom:16}}>
         {vol.title&&<div style={{padding:"12px 18px",background:t.goldBg,border:`1px solid ${t.border}`,borderRadius:"12px 12px 0 0"}}><span style={{fontSize:12,fontWeight:800,color:t.gold,letterSpacing:"0.06em"}}>{vol.title}</span></div>}
-        {flights.map((f,ri)=>{
-          return(<div key={ri} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:vol.title?(ri===flights.length-1?"0 0 12px 12px":"0"):"12px",padding:"20px",borderTop:vol.title||ri>0?"none":undefined}}>
+        {filtered.map((row,ri)=>{
+          const n=row.length;const has8=n>=8;
+          const scenario=row[0]||"";const compagnie=row[1]||"";const routing=row[2]||"";
+          const depArr=has8?(row[3]||""):"";
+          const duree=row[has8?4:3]||"";const escales=row[has8?5:4]||"";
+          const prix=row[has8?6:5]||"0";
+          const linkCell=row[has8?7:6]||"";const linkM=linkCell.match(/\[([^\]]+)\]\(([^)]+)\)/);
+          const airports=routing.split(/[-→>]/).map(s=>s.trim()).filter(Boolean);
+          const esc=parseInt(String(escales).replace(/[^\d]/g,""))||0;
+          return(<div key={ri} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:vol.title?(ri===filtered.length-1?"0 0 12px 12px":"0"):"12px",padding:"20px",borderTop:vol.title||ri>0?"none":undefined}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,flexWrap:"wrap",gap:8}}>
-              <div><div style={{fontSize:16,fontWeight:800,color:t.text}}>{f.airline}</div>{f.depArr&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>{f.depArr}</div>}</div>
-              <div style={{textAlign:"right"}}><div style={{fontSize:24,fontWeight:900,color:t.gold,fontFamily:MO}}>{fmt(f.price)}</div><div style={{fontSize:11,color:t.muted}}>CHF / pers</div></div>
+              <div><div style={{fontSize:16,fontWeight:800,color:t.text}}>{compagnie}</div>{depArr&&<div style={{fontSize:11,color:t.muted,marginTop:2}}>{depArr}</div>}</div>
+              <div style={{textAlign:"right"}}><div style={{fontSize:24,fontWeight:900,color:t.gold,fontFamily:MO}}>{fmt(prix)}</div><div style={{fontSize:11,color:t.muted}}>CHF / pers</div></div>
             </div>
-            {f.airports.length>=2&&<div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"16px 20px",marginBottom:14}}>
+            {airports.length>=2&&<div style={{background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"16px 20px",marginBottom:14}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{f.airports[0]}</div>
-                <div style={{flex:1,display:"flex",alignItems:"center",margin:"0 12px"}}><div style={{flex:1,height:1,background:t.border}}/>{f.stops>0&&<div style={{padding:"2px 10px",borderRadius:20,background:t.goldBg2,border:`1px solid ${t.gold}40`,fontSize:10,fontWeight:600,color:t.gold,margin:"0 8px",whiteSpace:"nowrap"}}>{f.stops} escale{f.stops>1?"s":""}</div>}<div style={{flex:1,height:1,background:t.border}}/></div>
-                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{f.airports[f.airports.length-1]}</div>
+                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{airports[0]}</div>
+                <div style={{flex:1,display:"flex",alignItems:"center",margin:"0 12px"}}><div style={{flex:1,height:1,background:t.border}}/>{esc>0&&<div style={{padding:"2px 10px",borderRadius:20,background:t.goldBg2,border:`1px solid ${t.gold}40`,fontSize:10,fontWeight:600,color:t.gold,margin:"0 8px",whiteSpace:"nowrap"}}>{esc} escale{esc>1?"s":""}</div>}<div style={{flex:1,height:1,background:t.border}}/></div>
+                <div style={{fontSize:18,fontWeight:800,color:t.text,fontFamily:MO}}>{airports[airports.length-1]}</div>
               </div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11,color:t.muted}}>{f.routing}</span>{f.duration&&<span style={{fontSize:12,fontWeight:600,color:t.text}}>⏱ {f.duration}</span>}</div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11,color:t.muted}}>{routing}</span><span style={{fontSize:12,fontWeight:600,color:t.text}}>⏱ {duree}</span></div>
             </div>}
-            {f.linkM&&<a href={f.linkM[2]} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"10px 20px",background:t.gold,color:"#0a0a0a",borderRadius:10,fontSize:13,fontWeight:700,textDecoration:"none"}}>{f.linkM[1]} ↗</a>}
+            {linkM&&<a href={linkM[2]} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"10px 20px",background:t.gold,color:"#0a0a0a",borderRadius:10,fontSize:13,fontWeight:700,textDecoration:"none"}}>{linkM[1]} ↗</a>}
           </div>);
         })}
       </div>);
     })}
-    {/* Non-table content (recommendations, notes) */}
-    {lines.filter(l=>{const s=l.trim();return s&&!/^\|/.test(s)&&!/^###/.test(s)&&!/^-{3,}/.test(s)&&s.length>10&&!/^Options?\s/i.test(s)&&!/^Connexion/i.test(s);}).slice(0,4).map((l,i)=><p key={`note-${i}`} style={{fontSize:13,color:t.muted,lineHeight:1.7,margin:"4px 0"}} dangerouslySetInnerHTML={{__html:inline(l)}}/>)}
   </div>);
 }
 
@@ -203,10 +190,10 @@ function HotelCard({name,lines,t}){
   // KV data
   const kv={};const rows=parseRows(lines);for(const r of rows){if(r.length>=2)kv[r[0].toLowerCase()]=r[1];}
   const get=k=>{for(const[key,val]of Object.entries(kv)){if(key.includes(k))return val;}return"";};
-  const stars=(get("étoile")||get("etoile")||get("type")||"").replace(/[^★⭐]/g,"").length||parseInt((get("étoile")||get("etoile")||get("type")||"").match(/(\d)\s*[ée]toile/i)?.[1])||0;
+  const stars=(get("étoile")||get("etoile")||"").replace(/[^★⭐]/g,"").length||0;
   const note=get("note");const noteNum=note.match(/(\d+\.?\d*)/)?.[1]||"";
   const zone=get("zone")||get("emplac");const chambre=get("chambre");
-  const equip=get("équip")||get("equip")||get("spécial");const prixNuit=get("prix/nuit")||get("prix_nuit")||get("prix estim")||get("prix");
+  const equip=get("équip")||get("equip");const prixNuit=get("prix/nuit")||get("prix_nuit")||get("prix estim");
   const prixTotal=get("prix total")||get("prix_total");
   const pN=prixNuit.match(/(\d[\d',.\s]*)/)?.[1]?.replace(/[',.\s]/g,"")||"";
   const pT=prixTotal.match(/(\d[\d',.\s]*)/)?.[1]?.replace(/[',.\s]/g,"")||"";
@@ -412,23 +399,13 @@ function CalendrierDisplay({lines,t}){
 // ═══════════════════════════════════════════════════════════════
 function RecoDisplay({lines,t}){return<div style={{background:t.goldBg,border:`1px solid ${t.gold}25`,borderRadius:12,padding:20}}><div style={{fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(lines.filter(l=>l.trim()).join(" "))}}/></div>;}
 function FideliteDisplay({lines,t}){
-  // Group into logical blocks: **Bold header** starts a block, bullets/continuations join it
-  const blocks=[];let cur="";
+  const paras=[];let cur="";
   for(const l of lines){const s=l.trim();if(!s||/^#/.test(s))continue;
-    // Bold header or standalone bold line starts new block
-    if(/^\*\*[^*]+\*\*\s*[:\/\-]/.test(s)){if(cur)blocks.push(cur);cur=s;}
-    // Bullet point continues current block
-    else if(/^[-•]/.test(s)){cur=cur?(cur+"<br/>"+s.replace(/^[-•]\s*/,"")):s.replace(/^[-•]\s*/,"");}
-    // Regular line continues
-    else{cur=cur?(cur+" "+s):s;}
-  }
-  if(cur)blocks.push(cur);
-  // If only 1 block or no bold headers found, show everything in one card
-  if(blocks.length<=1&&lines.filter(l=>l.trim()).length>1){
-    const allText=lines.filter(l=>{const s=l.trim();return s&&!/^#/.test(s);}).map(l=>l.trim().replace(/^[-•]\s*/,"")).join("<br/>");
-    return<div style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:10,padding:"14px 16px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(allText)}}/>;
-  }
-  return<div style={{display:"flex",flexDirection:"column",gap:8}}>{blocks.filter(p=>p.length>5).map((p,i)=><div key={i} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:10,padding:"14px 16px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(p)}}/>)}</div>;}
+    if(/^\*\*/.test(s)){if(cur)paras.push(cur);cur=s;}
+    else if(/^[-•]/.test(s)){cur=cur?(cur+" "+s.replace(/^[-•]\s*/,"")):s.replace(/^[-•]\s*/,"");}
+    else{cur=cur?(cur+" "+s):s;}}
+  if(cur)paras.push(cur);
+  return<div style={{display:"flex",flexDirection:"column",gap:8}}>{paras.filter(p=>p.length>5).map((p,i)=><div key={i} style={{background:t.card2,border:`1px solid ${t.border}`,borderRadius:10,padding:"14px 16px",fontSize:13,color:t.muted,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:inline(p)}}/>)}</div>;}
 
 // ═══════════════════════════════════════════════════════════════
 // RESULTS VIEW + RAW TEXT
@@ -555,7 +532,7 @@ export default function App(){
         <ResultsView text={result} t={t}/>
       </div>}
 
-      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.3</div>
+      <div style={{marginTop:24,textAlign:"center",fontSize:10,color:t.faint,letterSpacing:"0.1em",fontFamily:MO}}>KAYAK · BOOKING · GOOGLE FLIGHTS · SKYSCANNER<br/>v7.4</div>
       <ChatWidget t={t}/>
     </div>
   );
