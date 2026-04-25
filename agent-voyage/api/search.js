@@ -240,9 +240,16 @@ CHAQUE segment DOIT avoir son propre ### et son propre tableau avec EXACTEMENT c
 
 | Scénario | Compagnie | Routing | Durée | Escales | Prix/pers CHF | Lien |
 |---|---|---|---|---|---|---|
-| 💺 Business | Swiss | GVA-AGP | 2h25 | 0 | 450 | [Kayak](https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a&fs=cabin=b) |
+| 💺 Business | Swiss | GVA-AGP | 2h25 | 0 | 450 | [Kayak Business](https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a&fs=cabin=b) |
 | 🔀 Mixte | easyJet | GVA-AGP | 2h30 | 0 | 200 | [Kayak](https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a) |
-| 🪑 Économie | easyJet | GVA-AGP | 2h30 | 0 | 89 | [Kayak](https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a&fs=cabin=e) |
+| 🪑 Économie | easyJet | GVA-AGP | 2h30 | 0 | 89 | [Kayak Éco](https://www.kayak.com/flights/GVA-AGP/2026-07-01?sort=bestflight_a&fs=cabin=e) |
+
+RÈGLES DE PRIX :
+- Chercher le prix RÉEL pour les DATES EXACTES demandées, pas un prix "à partir de" ni une estimation
+- Chercher sur Kayak, Google Flights, Skyscanner pour chaque segment avec la date précise
+- Si le prix exact pour la date n'est pas trouvable, indiquer le prix trouvé ET préciser "(prix indicatif, vérifier sur le lien)" dans la cellule
+- NE JAMAIS inventer un prix. NE JAMAIS arrondir. Mettre le prix exact trouvé
+- Convertir en CHF si trouvé en EUR/USD/GBP
 
 RÈGLES VOLS ABSOLUES :
 - TOUJOURS 3 lignes par segment : 💺 Business, 🔀 Mixte, 🪑 Économie
@@ -250,10 +257,14 @@ RÈGLES VOLS ABSOLUES :
 - Routing TOUJOURS en format CODE-CODE (ex: GVA-AGP, pas "Genève vers Malaga")
 - Prix TOUJOURS en CHF (nombre seul, pas "CHF 450" ni "450 CHF" ni "45 USD")
 - Escales : nombre (0, 1, 2), pas "Direct" ni "1 escale Madrid"
-- Lien : TOUJOURS un lien cliquable [Texte](url), pas "swiss.com" en texte
+- Lien : TOUJOURS un lien Kayak avec dates et classe préremplis au format :
+  https://www.kayak.com/flights/CODE1-CODE2/YYYY-MM-DD?sort=bestflight_a&fs=cabin=b (business)
+  https://www.kayak.com/flights/CODE1-CODE2/YYYY-MM-DD?sort=bestflight_a&fs=cabin=e (éco)
+  NE JAMAIS mettre de lien vers swiss.com, airfrance.com, lufthansa.com ou tout autre site de compagnie aérienne
 - NE PAS mettre ** dans les cellules
 - NE PAS créer de tableaux transposés (colonnes = options)
 - NE PAS mettre de texte libre entre les lignes du tableau
+- NE PAS créer de segments séparés pour les vols domestiques/connexions internes (ex: SJO-TMU). Les mentionner dans une note sous le tableau du segment principal. Créer UNIQUEMENT les segments correspondant aux étapes demandées par l'utilisateur
 
 ## 🏨 Hébergements
 
