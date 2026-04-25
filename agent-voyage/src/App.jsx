@@ -15,7 +15,7 @@ const TIPS=["Recherche des vols...","Consultation de Skyscanner...","Vérificati
 const DARK={bg:"#0a0a0a",card:"#141414",card2:"#1c1c1c",input:"#202020",border:"#2a2218",text:"#f5f0e8",muted:"#999",faint:"#444",gold:"#c9a96e",goldD:"#a07840",goldBg:"rgba(201,169,110,0.06)",goldBg2:"rgba(201,169,110,0.12)",green:"#22c55e",red:"#ef4444",blue:"#5b9bd5"};
 const LIGHT={bg:"#f5f3ef",card:"#ffffff",card2:"#f0ede7",input:"#faf9f7",border:"#e0dcd4",text:"#1a1a1a",muted:"#6a6560",faint:"#ccc",gold:"#a6872f",goldD:"#8a7535",goldBg:"rgba(166,135,47,0.06)",goldBg2:"rgba(166,135,47,0.12)",green:"#3a8f4a",red:"#c94444",blue:"#3a7abf"};
 const FN="system-ui,-apple-system,sans-serif",MO="'SF Mono',monospace";
-const fmt=n=>{try{const s=String(n).replace(/\*\*/g,"").replace(/['\s,CHFchf]/g,"").trim();const v=parseInt(s);return isNaN(v)?String(n).replace(/\*\*/g,""):v.toLocaleString("fr-CH")}catch{return n}};
+const fmt=n=>{try{const s=String(n).replace(/\*\*/g,"").replace(/['\s,CHFchfEUReurUSDusdGBPgbp£€$]/g,"").replace(/[~≈]/g,"").trim();const v=parseInt(s);return isNaN(v)?String(n).replace(/\*\*/g,""):v.toLocaleString("fr-CH")}catch{return n}};
 
 // ═══════════════════════════════════════════════════════════════
 // TEXT PREPROCESSING — collapse multi-line table rows
